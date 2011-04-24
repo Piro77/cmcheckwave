@@ -60,7 +60,7 @@ static char *SOXCMD="/usr/local/bin/sox";
 static char *FFMPEGCMD="/usr/local/bin/ffmpeg";
 static char *AACENCCMD="/usr/local/bin/aacplusenc";
 
-void dumpinfo(int mcnt)
+int dumpinfo(int mcnt)
 {
     int honstart,hcnt,totalsec;
     int i;
@@ -169,7 +169,7 @@ int rechecktext(FILE *f)
 		}
 
 	}
-	dumpinfo(cnt);
+	return dumpinfo(cnt);
 
 
 }
@@ -191,19 +191,37 @@ int cmcheckwave(FILE *f)
 
 
     if (memcmp(get_bytes(f, 4), "RIFF", 4) != 0) {
+     //   fprintf(stderr, "Not a 'RIFF' format\n");
         return -1;
     }
+    fprintf(stderr, "[RIFF] (%lu bytes)\n", get_ulong(f));
     if (memcmp(get_bytes(f, 8), "WAVEfmt ", 8) != 0) {
+       // fprintf(stderr, "Not a 'WAVEfmt ' format\n");
         return -1;
     }
     len = get_ulong(f);
+    //fprintf(stderr, "[WAVEfmt ] (%lu bytes)\n", len);
+    //fprintf(stderr, "  Data type = %u (1 = PCM)\n", get_ushort(f));
+    get_ushort(f);
     channels = get_ushort(f);
+    //fprintf(stderr, "  Number of channels = %u (1 = mono, 2 = stereo)\n", channels);
+    //fprintf(stderr, "  Sampling rate = %luHz\n", get_ulong(f));
+    get_ulong(f);
     bsec = get_ulong(f);
+    //fprintf(stderr, "  Bytes / second = %lu\n", bsec);
+    //fprintf(stderr, "  Bytes x channels = %u\n", get_ushort(f));
+    get_ushort(f);
     bits = get_ushort(f);
+    //fprintf(stderr, "  Bits / sample = %u\n", bits);
+    for (i = 16; i < len; i++)
+	fgetc(f);
     while (fread(s, 4, 1, f) == 1) {
         len = get_ulong(f);
         s[4] = 0;
+        //fprintf(stderr, "[%s] (%lu bytes)\n", s, len);
         if (memcmp(s, "data", 4) == 0) break;
+        for (i = 0; i < len; i++)
+	    fgetc(f);
     }
 
     readed=max=totalsec=kankaku=mcnt=0;
@@ -313,65 +331,7 @@ int cmcheckwave(FILE *f)
 	}
 
     }
-    honstart=0;
-    hcnt=0;
-    totalsec=0;
-    printf("#!/bin/sh\n# cmcheckwave %s\n#\n",wkfilename?wkfilename:"");
-    //カットするため、一連のCM,本編時間を結合
-    for(i=0;i<mcnt;i++) {
-	    printf("# %.2f %.2f diff %.2f %s\n",m[i].stsec/1000.0,m[i].edsec/1000.0,m[i].diffs/1000.0,m[i].cmflg?"CM":"");
-	    //本編開始位置をマーク
-	    if ((m[i].cmflg==0)&&(honstart==0)) {
-		    honstart=1;
-		    if (i==0) h[hcnt].stsec = 0;
-		    else h[hcnt].stsec = m[i-1].edsec+(defmuon*0.5);
-	    }
-	    else {
-		    //終了位置をマーク
-	      if ((m[i].cmflg==1)&&(honstart==1)) {
-		    honstart=0;
-		    h[hcnt].edsec = m[i-1].stsec;
-		    totalsec += h[hcnt].edsec - h[hcnt].stsec;
-		    hcnt++;
-	      }
-	    }
-    }
-    if (honstart==1) {
-	h[hcnt].edsec = m[i-1].stsec;
-	totalsec += h[hcnt].edsec - h[hcnt].stsec;
-	hcnt++;
-    }
-    
-    printf("# total %.2f\n\n",totalsec/1000.0);
-
-    for(i=0;i<hcnt;i++) {
-	    if (wkfilename) {
-	      printf("%s -splitx %.2f:%.2f %s -out %s.%d\n",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0,wkfilename,wkfilename,i);
-   	printf("%s -v 0 -i %s.%d -vn %s.%d.wav\n",FFMPEGCMD,wkfilename,i,wkfilename,i);
-	printf("%s -v 0 -i %s.%d -an -vcodec copy %s.%d.mp4\n",FFMPEGCMD,wkfilename,i,wkfilename,i);
-	    }
-	    else {
-	      printf("# %s -splitx %.2f:%.2f \n",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0);
-	    }
-    }
-    if (wkfilename) {
-	    printf("%s ",SOXCMD);
-	for(i=0;i<hcnt;i++) {
-		printf(" %s.%d.wav ",wkfilename,i);
-	}
-	printf(" %s.wav\n",wkfilename);
-	printf("%s %s.wav %s.aac 60\n",AACENCCMD,wkfilename,wkfilename);
-	printf("%s ",MP4BOXCMD);
-	for(i=0;i<hcnt;i++) {
-		printf(" -cat %s.%d.mp4 ",wkfilename,i);
-	}
-	printf(" %s-new.mp4\n",wkfilename);
-	printf("%s -add %s.aac %s-new.mp4\n",MP4BOXCMD,wkfilename,wkfilename);
-
-	printf("rm -f %s.*\n\n",wkfilename);
-    }
-
-    return hcnt;
+    return dumpinfo(mcnt);
 }
 
 int main(int argc, char *argv[])
@@ -384,9 +344,9 @@ extern int optind, opterr;
     char *tmpenv;
     ret = -1;
 
-  while ((ch = getopt(argc, argv, "vb:m:n:")) != -1){
+  while ((ch = getopt(argc, argv, "db:m:v:")) != -1){
     switch (ch){
-      case 'v':
+      case 'd':
 	verbose=1;
 	break;
       case 'b':
@@ -395,7 +355,7 @@ extern int optind, opterr;
       case 'm':
 	defmuon=atoi(optarg);
 	break;
-      case 'n':
+      case 'v':
 	defmax=atoi(optarg);
 	break;
       default:

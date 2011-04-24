@@ -4,7 +4,7 @@ OBJ_TARGETS	= cmcheckwave.o
 
 LANG=C
 CC		= gcc
-CFLAGS		= -g -O2
+CFLAGS		= -g
 LDFLAGS		=
 LIBS		=
 
