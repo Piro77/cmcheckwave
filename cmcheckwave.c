@@ -61,6 +61,33 @@ static char *SOXCMD="/usr/local/bin/sox";
 static char *FFMPEGCMD="/usr/local/bin/ffmpeg";
 static char *AACENCCMD="/usr/local/bin/aacplusenc";
 
+int checkMP4RAP(int stsec,int edsec)
+{
+	FILE *pp;
+	char pbuf[1024];
+	char cmdbuf[1024];
+	float rap;
+
+	if (wkfilename==NULL) return stsec;
+
+	sprintf(cmdbuf,"%s -splitx %.2f:%.2f %s -out /dev/null",MP4BOXCMD,edsec/1000.0,(edsec+10000)/1000.0,wkfilename);
+
+	rap=0.0;
+	pp = popen(cmdbuf,"r");
+	if (pp == NULL) return stsec;
+	while(fgets(pbuf,1024,pp)!=NULL){
+		if (strstr(pbuf,"Adjusting chunk start time to previous random access at ")) {
+			sscanf(pbuf+56,"%f",&rap);
+			//TODO rapはCM開始フレームの秒数なのでちょっと戻す。
+			//     フレームレートとか調べないとだめだな・・・
+			rap = rap - 0.04;
+		}
+	}
+	pclose(pp);
+	if (rap > 0 && stsec < rap*1000.0) return rap*1000.0;
+	else return stsec;
+
+}
 int dumpinfo(int mcnt)
 {
 	int honstart,hcnt,totalsec;
@@ -83,14 +110,15 @@ int dumpinfo(int mcnt)
 			//終了位置をマーク
 			if ((m[i].cmflg==1)&&(honstart==1)) {
 				honstart=0;
-				h[hcnt].edsec = m[i-1].stsec;
+				//h[hcnt].edsec = m[i-1].stsec;
+				h[hcnt].edsec = checkMP4RAP(m[i-1].stsec,m[i-1].edsec);
 				totalsec += h[hcnt].edsec - h[hcnt].stsec;
 				hcnt++;
 			}
 		}
 	}
 	if (honstart==1) {
-		h[hcnt].edsec = m[i-1].stsec;
+		h[hcnt].edsec = checkMP4RAP(m[i-1].stsec,m[i-1].edsec);
 		totalsec += h[hcnt].edsec - h[hcnt].stsec;
 		hcnt++;
 	}
