@@ -57,6 +57,7 @@ static int defmuon=250;
 static int defmax=9;
 
 static char *MP4BOXCMD="/usr/local/bin/MP4Box -quiet -noprog";
+static char *MP4BOXCMDRAPSTR="Adjusting chunk start time to previous random access at ";
 static char *SOXCMD="/usr/local/bin/sox";
 static char *FFMPEGCMD="/usr/local/bin/ffmpeg";
 static char *AACENCCMD="/usr/local/bin/aacplusenc";
@@ -76,8 +77,8 @@ int checkMP4RAP(int stsec,int edsec)
 	pp = popen(cmdbuf,"r");
 	if (pp == NULL) return stsec;
 	while(fgets(pbuf,1024,pp)!=NULL){
-		if (strstr(pbuf,"Adjusting chunk start time to previous random access at ")) {
-			sscanf(pbuf+56,"%f",&rap);
+		if (strstr(pbuf,MP4BOXCMDRAPSTR)) {
+			sscanf(pbuf+strlen(MP4BOXCMDRAPSTR),"%f",&rap);
 			//TODO rapはCM開始フレームの秒数なのでちょっと戻す。
 			//     フレームレートとか調べないとだめだな・・・
 			rap = rap - 0.04;
@@ -410,6 +411,7 @@ int main(int argc, char *argv[])
 	if (tmpenv=getenv("FFMPEG")) FFMPEGCMD=tmpenv;
 	if (tmpenv=getenv("SOX")) SOXCMD=tmpenv;
 	if (tmpenv=getenv("MP4BOX")) MP4BOXCMD=tmpenv;
+	if (tmpenv=getenv("MP4BOXCMDRAPSTR")) MP4BOXCMDRAPSTR=tmpenv;
 	if (tmpenv=getenv("AACENC")) AACENCCMD=tmpenv;
 
 	ret=0;
