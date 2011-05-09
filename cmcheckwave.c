@@ -62,6 +62,34 @@ static char *SOXCMD="/usr/local/bin/sox";
 static char *FFMPEGCMD="/usr/local/bin/ffmpeg";
 static char *AACENCCMD="/usr/local/bin/aacplusenc";
 
+FILE *checkMP4(FILE *f,char *filename)
+{
+	char readbuf[20];
+	char cmdbuf[1024];
+	FILE *pp;
+
+	memset(readbuf,0,sizeof(readbuf));
+	fread(readbuf,sizeof(readbuf),1,f);
+	if (!strstr(readbuf+4,"ftypisom")) {
+		return NULL;
+	}
+	sprintf(cmdbuf,"%s -v 0 -i %s -f wav pipe: 2>/dev/null",FFMPEGCMD,filename);
+	pp = popen(cmdbuf,"r");
+	if (pp == NULL) return NULL;
+	fclose(f);
+	wkfilename = strdup(filename);
+	return pp;
+}
+
+FILE *openpipeffmpeg(char *filename)
+{
+	char cmdbuf[1024];
+	FILE *pp;
+
+
+
+}
+
 int checkMP4RAP(int stsec,int edsec)
 {
 	FILE *pp;
@@ -230,7 +258,8 @@ int cmcheckwave(FILE *f)
 		//   fprintf(stderr, "Not a 'RIFF' format\n");
 		return -1;
 	}
-	fprintf(stderr, "[RIFF] (%lu bytes)\n", get_ulong(f));
+	//fprintf(stderr, "[RIFF] (%lu bytes)\n", get_ulong(f));
+	get_ulong(f);
 	if (memcmp(get_bytes(f, 8), "WAVEfmt ", 8) != 0) {
 		// fprintf(stderr, "Not a 'WAVEfmt ' format\n");
 		return -1;
@@ -324,15 +353,12 @@ int cmcheckwave(FILE *f)
 		//本編前CMチェック
 		if ((m[0].cmflg==0) && (m[0].diffs < 15000))
 			m[0].cmflg=1;
-		// 最終CMチェック
-		if ((m[mcnt-1].cmflg==0) && (m[mcnt-1].diffs < 15000))
-			m[mcnt-1].cmflg=1;
 		//細切れCMのたしこみ
 		for(i=1;i<mcnt-1;i++) {
 			// 本編で31秒以下が連続だったら、次の31秒以上の本編もしくはCMまでの時間をチェック
 			if (m[i].cmflg==0 && m[i].diffs < 31000  && m[i+1].cmflg==0 && m[i+1].diffs < 31000) {
 				cmwork=0;
-				for(j=i;j<mcnt-1;j++) {
+				for(j=i;j<mcnt;j++) {
 					if (m[j].cmflg==1) break;
 					if (m[j].diffs > 31000) break;
 					cmwork = cmwork + m[j].diffs;
@@ -340,7 +366,7 @@ int cmcheckwave(FILE *f)
 				//合計時間を15秒で割ってcm時間っぽいならばCMとする。
 				// TODO 30(15)秒以下の条件付けがいる？60秒どうする？
 				if (cmwork%15000>14500 || cmwork%15000<500) {
-					for(j=i;j<mcnt-1;j++) {
+					for(j=i;j<mcnt;j++) {
 						if (m[j].cmflg==1) break;
 						if (m[j].diffs > 31000) break;
 						m[j].cmflg=1;
@@ -349,6 +375,9 @@ int cmcheckwave(FILE *f)
 			}
 
 		}
+		// 最終CMチェック
+		if ((m[mcnt-1].cmflg==0) && (m[mcnt-1].diffs < 15000))
+			m[mcnt-1].cmflg=1;
 		//短い本編・提供などの処理
 		for(i=1;i<mcnt-1;i++) {
 			//本編で46秒以下かつ、前後がCMの場合CM14-16,29-31,44-46秒でもCMとする。
@@ -375,7 +404,7 @@ int main(int argc, char *argv[])
 	extern char *optarg;
 	extern int optind, opterr;
 	int i,ch;
-	FILE *f;
+	FILE *f,*p;
 	int ret;
 	char *tmpenv;
 	ret = -1;
@@ -420,10 +449,13 @@ int main(int argc, char *argv[])
 	else
 		f = fopen(argv[0],"rb");
 	if (f) {
-		ret = cmcheckwave(f);
+		p = checkMP4(f,argv[0]);
+		if (p)  ret = cmcheckwave(p);
+		else    ret = cmcheckwave(f);
 		// -1 のときはテキストとして再チェック
 		if (ret == -1) rechecktext(f);
-		fclose(f);
+		if (p) pclose(p);
+		else fclose(f);
 	}
 	return ret;
 }
