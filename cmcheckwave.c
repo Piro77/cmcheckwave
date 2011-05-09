@@ -70,6 +70,7 @@ FILE *checkMP4(FILE *f,char *filename)
 
 	memset(readbuf,0,sizeof(readbuf));
 	fread(readbuf,sizeof(readbuf),1,f);
+	rewind(f);
 	if (!strstr(readbuf+4,"ftypisom")) {
 		return NULL;
 	}
@@ -393,6 +394,11 @@ int cmcheckwave(FILE *f)
 				if ((m[i].diffs > 9500) && (m[i].diffs < 10500)) m[i-1].cmflg=0;
 				if ((m[i].diffs > 4500) && (m[i].diffs < 5500)) m[i-1].cmflg=0;
 			}
+			// TODO 前後が本編で単独でCMの場合は本編とする?
+			// 46秒以下のチェックも?
+			// if (m[i].cmflg==1 && m[i-1].cmflg==0 && m[i+1].cmflg==0) {
+			// 	m[i].cmflg=0;
+			// }
 		}
 
 	}
@@ -444,19 +450,25 @@ int main(int argc, char *argv[])
 	if (tmpenv=getenv("AACENC")) AACENCCMD=tmpenv;
 
 	ret=0;
+	p=NULL;
 	if (strcmp(argv[0],"-")==0)
 		f = stdin;
-	else
+	else {
 		f = fopen(argv[0],"rb");
-	if (f) {
-		p = checkMP4(f,argv[0]);
-		if (p)  ret = cmcheckwave(p);
-		else    ret = cmcheckwave(f);
-		// -1 のときはテキストとして再チェック
-		if (ret == -1) rechecktext(f);
-		if (p) pclose(p);
-		else fclose(f);
+		if (f) {
+			p = checkMP4(f,argv[0]);
+		}
+		else
+			return -1;
 	}
+
+	if (p)  ret = cmcheckwave(p);
+	else    ret = cmcheckwave(f);
+	// -1 のときはテキストとして再チェック
+	if (ret == -1) rechecktext(f);
+	if (p) pclose(p);
+	else fclose(f);
+
 	return ret;
 }
 
