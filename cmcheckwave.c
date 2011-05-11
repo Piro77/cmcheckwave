@@ -74,6 +74,7 @@ FILE *checkMP4(FILE *f,char *filename)
 	if (!strstr(readbuf+4,"ftypisom")) {
 		return NULL;
 	}
+	// mp4ファイルだったら、ffmpegでwaveに変換し読み込む。
 	sprintf(cmdbuf,"%s -v 0 -i %s -f wav pipe: 2>/dev/null",FFMPEGCMD,filename);
 	pp = popen(cmdbuf,"r");
 	if (pp == NULL) return NULL;
@@ -357,11 +358,14 @@ int cmcheckwave(FILE *f)
 		//細切れCMのたしこみ
 		for(i=1;i<mcnt-1;i++) {
 			// 本編で31秒以下が連続だったら、次の31秒以上の本編もしくはCMまでの時間をチェック
+			// 足しこみは61秒まで
+			// TODO 28+32で60秒CMとかいうのがあるどうするのがいいだろうか・・・
 			if (m[i].cmflg==0 && m[i].diffs < 31000  && m[i+1].cmflg==0 && m[i+1].diffs < 31000) {
 				cmwork=0;
 				for(j=i;j<mcnt;j++) {
 					if (m[j].cmflg==1) break;
 					if (m[j].diffs > 31000) break;
+					if (cmwork + m[j].diffs > 61000) break;
 					cmwork = cmwork + m[j].diffs;
 				}
 				//合計時間を15秒で割ってcm時間っぽいならばCMとする。
