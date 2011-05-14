@@ -1,10 +1,21 @@
 
+・準備するもの
+  ffmpeg 動画からの音声抽出に使います。
+         環境変数 FFMPEGCMD で指定可能
+  mp4box mp4ファイルの分割に使用
+         環境変数 MP4BOXCMD で指定可能
+  sox    分割したwaveファイルを結合するのに利用
+         環境変数 SOXCMD で指定可能
+  aacplusenc 結合したwaveファイルをaacエンコードするのに利用
+         環境変数 AACENCCMD で指定可能
+
 ・使い方
   waveファイルを読み込み判定
   例: cmcheckwave out.wav
   mp4ファイルからwaveファイルをpipe出力し判定
   例: ffmpeg -v 0 -i 録画ファイル.mp4 -f wav pipe: | cmcheckwave -
   mp4ファイル直接指定(-bが指定されたとして動作します)
+   (プログラムにはmp4を読み込む機能はなく上記例のffmpegコマンドを発行しています。)
   cmcheckwave 録画ファイル.mp4
 
   出力は標準出力に区切りとカット用のコマンドサンプルが出力されます。
