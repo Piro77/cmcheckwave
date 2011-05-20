@@ -264,11 +264,11 @@ int dumpinfo(int mcnt)
 	}
 
 	for (i=0;i<tclistnum(cmdlist);i++) {
-		if (cmdexecute) {
+		if (cmdexecute && wkfilename) {
 			FILE *pp;
 			char pbuf[1024];
 			pp = popen(tclistval2(cmdlist,i),"r");
-			if (pp==NULL) {printf("cmdfail %s\n",tclistval2(cmdlist,i));continue;}
+			if (pp==NULL) {continue;}
 			while(fgets(pbuf,1024,pp)!=NULL){
 			}
 			pclose(pp);
