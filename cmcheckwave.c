@@ -46,6 +46,7 @@ typedef struct {
 	int  diffs;
 	char cmflg;
 	char honpen;
+	int  peak;
 }muonst;
 
 static muonst m[1000];
@@ -55,17 +56,20 @@ static int noaudioencode=0;
 static char *wkfilename=NULL;
 static int defmuon=250;
 static int defmax=9;
+static int thumb=0;
+static int txtrecheck=0;
 
 static char *MP4BOXCMD="/usr/local/bin/MP4Box -quiet -noprog";
 static char *MP4BOXCMDRAPSTR="Adjusting chunk start time to previous random access at ";
 static char *SOXCMD="/usr/local/bin/sox";
 static char *FFMPEGCMD="/usr/local/bin/ffmpeg";
+static char *MPLAYERCMD="/usr/local/bin/mplayer";
 static char *AACENCCMD="/usr/local/bin/aacplusenc";
 
 FILE *checkMP4(FILE *f,char *filename)
 {
 	char readbuf[20];
-	char cmdbuf[1024];
+	char *cmdbuf;
 	FILE *pp;
 
 	memset(readbuf,0,sizeof(readbuf));
@@ -75,7 +79,8 @@ FILE *checkMP4(FILE *f,char *filename)
 		return NULL;
 	}
 	// mp4ファイルだったら、ffmpegでwaveに変換し読み込む。
-	sprintf(cmdbuf,"%s -v 0 -i %s -f wav pipe: 2>/dev/null",FFMPEGCMD,filename);
+	//sprintf(cmdbuf,"%s -v 0 -i %s -f wav pipe: 2>/dev/null",FFMPEGCMD,filename);
+	asprintf(&cmdbuf,"%s -v 0 -i %s -f wav pipe: 2>/dev/null",FFMPEGCMD,filename);
 	pp = popen(cmdbuf,"r");
 	if (pp == NULL) return NULL;
 	fclose(f);
@@ -122,7 +127,7 @@ int checkMP4RAP(int stsec,int edsec)
 int dumpinfo(int mcnt)
 {
 	int honstart,hcnt,totalsec;
-	int i;
+	int i,pre;
 
 	honstart=0;
 	hcnt=0;
@@ -177,6 +182,10 @@ int dumpinfo(int mcnt)
 			printf(" %s.wav\n",wkfilename);
 			printf("%s %s.wav %s.aac 60\n",AACENCCMD,wkfilename,wkfilename);
 		}
+		//再チェックの場合-new.mp4ファイルを削除する
+		if (txtrecheck) {
+			printf("rm -f %s-new.mp4\n",wkfilename);
+		}
 		printf("%s ",MP4BOXCMD);
 		for(i=0;i<hcnt;i++) {
 			printf(" -cat %s.%d.mp4 ",wkfilename,i);
@@ -187,7 +196,16 @@ int dumpinfo(int mcnt)
 			printf("%s -add %s.aac %s-new.mp4\n",MP4BOXCMD,wkfilename,wkfilename);
 
 		printf("rm -f %s.*\n\n",wkfilename);
+
+		if (thumb) {
+			pre=0;
+			for(i=0;i<mcnt;i++) {
+				printf("mplayer -ss %.2f -frames 1 -vo png  %s ; mv 00000001.png %s-%d.png\n",(pre + (m[i].stsec-pre)/2)/1000.0,wkfilename,wkfilename,i);
+				pre = m[i].stsec;
+			}
+		}
 	}
+
 }
 
 int rechecktext(FILE *f)
@@ -235,6 +253,7 @@ int rechecktext(FILE *f)
 		}
 
 	}
+	txtrecheck=1;
 	return dumpinfo(cnt);
 
 
@@ -254,7 +273,7 @@ int cmcheckwave(FILE *f)
 	unsigned char *readbuf;
 	int honstart;
 	int cmwork;
-
+	int peak;
 
 	if (memcmp(get_bytes(f, 4), "RIFF", 4) != 0) {
 		//   fprintf(stderr, "Not a 'RIFF' format\n");
@@ -292,6 +311,7 @@ int cmcheckwave(FILE *f)
 	}
 
 	readed=max=totalsec=kankaku=mcnt=0;
+	peak=0;
 	muonstartsec=-1;
 	loop=1;
 	readbuf=malloc(4096*1000);
@@ -312,6 +332,7 @@ int cmcheckwave(FILE *f)
 					readbufsz+=2;
 				}
 				if (x > max) max = x;
+				if (x > peak) peak = x;
 				//printf("%d", x);
 				//if (i != channels - 1) printf("\t");
 			}
@@ -341,7 +362,10 @@ int cmcheckwave(FILE *f)
 							if ((diffs >  59.5) && (diffs < 60.5)) m[mcnt].cmflg=1;
 
 							kankaku=totalsec;
+							m[mcnt].peak=peak;
 							mcnt++;
+
+							peak=0;
 						}
 						muonstartsec=-1;
 					}
@@ -419,7 +443,7 @@ int main(int argc, char *argv[])
 	char *tmpenv;
 	ret = -1;
 
-	while ((ch = getopt(argc, argv, "adb:m:v:")) != -1){
+	while ((ch = getopt(argc, argv, "adtb:m:v:")) != -1){
 		switch (ch){
 			case 'a':
 				noaudioencode=1;
@@ -435,6 +459,9 @@ int main(int argc, char *argv[])
 				break;
 			case 'v':
 				defmax=atoi(optarg);
+				break;
+			case 't':
+				thumb=1;
 				break;
 			default:
 				usage();
@@ -452,6 +479,7 @@ int main(int argc, char *argv[])
 	if (tmpenv=getenv("MP4BOX")) MP4BOXCMD=tmpenv;
 	if (tmpenv=getenv("MP4BOXCMDRAPSTR")) MP4BOXCMDRAPSTR=tmpenv;
 	if (tmpenv=getenv("AACENC")) AACENCCMD=tmpenv;
+	if (tmpenv=getenv("MPLAYERCMD")) MPLAYERCMD=tmpenv;
 
 	ret=0;
 	p=NULL;
