@@ -1,6 +1,6 @@
 PREFIX          = /usr/local
 TARGETS		= cmcheckwave
-OBJ_TARGETS	= cmcheckwave.o
+OBJ_TARGETS	= cmcheckwave.o tclist.o
 
 LANG=C
 CC		= gcc

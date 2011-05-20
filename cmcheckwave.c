@@ -12,6 +12,8 @@ Usage: cmcheckwave filename.wav
 #include <unistd.h>
 #include <assert.h>
 
+#include "tclist.h"
+
 static void usage(void){
 	exit(1);
 }
@@ -58,6 +60,7 @@ static int defmuon=250;
 static int defmax=9;
 static int thumb=0;
 static int txtrecheck=0;
+static int cmdexecute=0;
 
 static char *MP4BOXCMD="/usr/local/bin/MP4Box -quiet -noprog";
 static char *MP4BOXCMDRAPSTR="Adjusting chunk start time to previous random access at ";
@@ -128,6 +131,9 @@ int dumpinfo(int mcnt)
 {
 	int honstart,hcnt,totalsec;
 	int i,pre;
+	char *cptr,*cptr2,*tfptr;
+	TCLIST *cmdlist;
+	TCLIST *tflist;
 
 	honstart=0;
 	hcnt=0;
@@ -161,49 +167,114 @@ int dumpinfo(int mcnt)
 
 	printf("# total %.2f\n\n",totalsec/1000.0);
 
+	cmdlist = tclistnew();
+	tflist = tclistnew();
 	for(i=0;i<hcnt;i++) {
 		if (wkfilename) {
-			printf("%s -splitx %.2f:%.2f %s -out %s.%d%s\n",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0,wkfilename,wkfilename,i,noaudioencode?".mp4":"");
+			asprintf(&tfptr,"%s.%d%s",wkfilename,i,noaudioencode?".mp4":"");
+			asprintf(&cptr,"%s -splitx %.2f:%.2f %s -out %s",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0,wkfilename,tfptr);
+			tclistpush2(cmdlist,cptr);
+			tclistpush2(tflist,tfptr);
+			free(tfptr);
+			free(cptr);
+
 			if (!noaudioencode) {
-				printf("%s -v 0 -i %s.%d -vn %s.%d.wav\n",FFMPEGCMD,wkfilename,i,wkfilename,i);
-				printf("%s -v 0 -i %s.%d -an -vcodec copy %s.%d.mp4\n",FFMPEGCMD,wkfilename,i,wkfilename,i);
+				asprintf(&tfptr,"%s.%d.wav",wkfilename,i);
+
+				asprintf(&cptr,"%s -v 0 -i %s.%d -vn %s",FFMPEGCMD,wkfilename,i,tfptr);
+				tclistpush2(cmdlist,cptr);
+				tclistpush2(tflist,tfptr);
+				free(tfptr);
+				free(cptr);
+
+				asprintf(&tfptr,"%s.%d.mp4",wkfilename,i);
+				asprintf(&cptr,"%s -v 0 -i %s.%d -an -vcodec copy %s",FFMPEGCMD,wkfilename,i,tfptr);
+				tclistpush2(cmdlist,cptr);
+				tclistpush2(tflist,tfptr);
+				free(tfptr);
+				free(cptr);
 			}
 		}
 		else {
-			printf("# %s -splitx %.2f:%.2f \n",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0);
+			asprintf(&cptr,"# %s -splitx %.2f:%.2f ",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0);
+			tclistpush2(cmdlist,cptr);
 		}
 	}
 	if (wkfilename) {
 		if (!noaudioencode) {
-			printf("%s ",SOXCMD);
+			asprintf(&cptr2,"%s ",SOXCMD);
 			for(i=0;i<hcnt;i++) {
-				printf(" %s.%d.wav ",wkfilename,i);
+				asprintf(&tfptr,"%s.%d.wav",wkfilename,i);
+				asprintf(&cptr,"%s %s ",cptr2,tfptr);
+				free(cptr2);
+				cptr2=cptr;
+				tclistpush2(tflist,tfptr);
+				free(tfptr);
 			}
-			printf(" %s.wav\n",wkfilename);
-			printf("%s %s.wav %s.aac 60\n",AACENCCMD,wkfilename,wkfilename);
+			asprintf(&tfptr,"%s.wav",wkfilename);
+			asprintf(&cptr,"%s %s",cptr2,tfptr);
+			free(cptr2);
+			tclistpush2(cmdlist,cptr);
+			tclistpush2(tflist,tfptr);
+			free(tfptr);
+
+			asprintf(&tfptr,"%s.aac",wkfilename);
+			asprintf(&cptr,"%s %s.wav %s 60",AACENCCMD,wkfilename,tfptr);
+			tclistpush2(cmdlist,cptr);
+			free(cptr);
+			tclistpush2(tflist,tfptr);
+			free(tfptr);
 		}
 		//再チェックの場合-new.mp4ファイルを削除する
 		if (txtrecheck) {
-			printf("rm -f %s-new.mp4\n",wkfilename);
+			asprintf(&cptr,"rm -f %s-new.mp4",wkfilename);
+			tclistpush2(cmdlist,cptr);
+			free(cptr);
 		}
-		printf("%s ",MP4BOXCMD);
+		asprintf(&cptr2,"%s",MP4BOXCMD);
 		for(i=0;i<hcnt;i++) {
-			printf(" -cat %s.%d.mp4 ",wkfilename,i);
+			asprintf(&cptr,"%s -cat %s.%d.mp4 ",cptr2,wkfilename,i);
+			free(cptr2);
+			cptr2=cptr;
 		}
-		printf(" %s-new.mp4\n",wkfilename);
+		asprintf(&cptr,"%s %s-new.mp4",cptr2,wkfilename);
+		tclistpush2(cmdlist,cptr);
+		free(cptr);
 
-		if (!noaudioencode)
-			printf("%s -add %s.aac %s-new.mp4\n",MP4BOXCMD,wkfilename,wkfilename);
+		if (!noaudioencode) {
+			asprintf(&cptr,"%s -add %s.aac %s-new.mp4",MP4BOXCMD,wkfilename,wkfilename);
+			tclistpush2(cmdlist,cptr);
+		}
 
-		printf("rm -f %s.*\n\n",wkfilename);
+
+		for(i=0;i<tclistnum(tflist);i++) {
+			asprintf(&cptr,"rm -f %s",tclistval2(tflist,i));
+			tclistpush2(cmdlist,cptr);
+			free(cptr);
+		}
 
 		if (thumb) {
 			pre=0;
 			for(i=0;i<mcnt;i++) {
-				printf("mplayer -ss %.2f -frames 1 -vo png  %s ; mv 00000001.png %s-%d.png\n",(pre + (m[i].stsec-pre)/2)/1000.0,wkfilename,wkfilename,i);
+				asprintf(&cptr,"mplayer -ss %.2f -frames 1 -vo png  %s ; mv 00000001.png %s-%d.png",(pre + (m[i].stsec-pre)/2)/1000.0,wkfilename,wkfilename,i);
+				tclistpush2(cmdlist,cptr);
 				pre = m[i].stsec;
 			}
 		}
+	}
+
+	for (i=0;i<tclistnum(cmdlist);i++) {
+		if (cmdexecute) {
+			FILE *pp;
+			char pbuf[1024];
+			pp = popen(tclistval2(cmdlist,i),"r");
+			if (pp==NULL) {printf("cmdfail %s\n",tclistval2(cmdlist,i));continue;}
+			while(fgets(pbuf,1024,pp)!=NULL){
+			}
+			pclose(pp);
+		}
+		else
+			printf("%s\n",tclistval2(cmdlist,i));
 	}
 
 }
@@ -443,7 +514,7 @@ int main(int argc, char *argv[])
 	char *tmpenv;
 	ret = -1;
 
-	while ((ch = getopt(argc, argv, "adtb:m:v:")) != -1){
+	while ((ch = getopt(argc, argv, "adtxb:m:v:")) != -1){
 		switch (ch){
 			case 'a':
 				noaudioencode=1;
@@ -462,6 +533,9 @@ int main(int argc, char *argv[])
 				break;
 			case 't':
 				thumb=1;
+				break;
+			case 'x':
+				cmdexecute=1;
 				break;
 			default:
 				usage();
