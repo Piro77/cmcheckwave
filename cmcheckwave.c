@@ -61,6 +61,7 @@ static int defmax=9;
 static int thumb=0;
 static int txtrecheck=0;
 static int cmdexecute=0;
+static int checkcomplete=0;
 
 static char *MP4BOXCMD="/usr/local/bin/MP4Box -quiet -noprog";
 static char *MP4BOXCMDRAPSTR="Adjusting chunk start time to previous random access at ";
@@ -125,6 +126,65 @@ int checkMP4RAP(int stsec,int edsec)
 	pclose(pp);
 	if (rap > 0 && stsec < rap*1000.0) return rap*1000.0;
 	else return stsec;
+
+}
+int cmpinfo(int mcnt)
+{
+	int i;
+	char *cmdptr,readbuf[20];
+	TCLIST *cmdlist;
+
+	if (!wkfilename) return 0;
+
+	cmdlist = tclistnew();
+
+	asprintf(&cmdptr,"#!/bin/sh");
+	tclistpush2(cmdlist,cmdptr);
+	free(cmdptr);
+
+
+	for(i=0;i<mcnt;i++) {
+		if (thumb) {
+			asprintf(&cmdptr,"rm -f %s-%d.png",wkfilename,i);
+			tclistpush2(cmdlist,cmdptr);
+			free(cmdptr);
+		}
+	}
+	// check new mp4
+	asprintf(&cmdptr,"%s-new.mp4",wkfilename);
+	FILE *fp;
+	fp = fopen(cmdptr,"rb");
+	if (fp==NULL) {
+		//ファイルなし
+		return 0;
+	}
+	fread(readbuf,sizeof(readbuf),1,fp);
+	if (!strstr(readbuf+4,"ftypisom")) {
+		//mp4じゃない感じ
+		return 0;
+	}
+	fclose(fp);
+	asprintf(&cmdptr,"mv %s-new.mp4 %s",wkfilename,wkfilename);
+	tclistpush2(cmdlist,cmdptr);
+	free(cmdptr);
+
+	asprintf(&cmdptr,"rm -f %s-sh",wkfilename);
+	tclistpush2(cmdlist,cmdptr);
+	free(cmdptr);
+
+	for(i=0;i<tclistnum(cmdlist);i++) {
+		if (cmdexecute) {
+			FILE *pp;
+			char pbuf[1024];
+			pp = popen(tclistval2(cmdlist,i),"r");
+			if (pp==NULL) {continue;}
+			while(fgets(pbuf,1024,pp)!=NULL){
+			}
+			pclose(pp);
+		}
+		else
+			printf("%s\n",tclistval2(cmdlist,i));
+	}
 
 }
 int dumpinfo(int mcnt)
@@ -256,7 +316,7 @@ int dumpinfo(int mcnt)
 		if (thumb) {
 			pre=0;
 			for(i=0;i<mcnt;i++) {
-				asprintf(&cptr,"mplayer -ss %.2f -frames 1 -vo png  %s ; mv 00000001.png %s-%d.png",(pre + (m[i].stsec-pre)/2)/1000.0,wkfilename,wkfilename,i);
+				asprintf(&cptr,"%s -ao nul -ss %.2f -frames 1 -vo png  %s ; mv 00000001.png %s-%d.png",MPLAYERCMD,(pre + (m[i].stsec-pre)/2)/1000.0,wkfilename,wkfilename,i);
 				tclistpush2(cmdlist,cptr);
 				pre = m[i].stsec;
 			}
@@ -323,6 +383,9 @@ int rechecktext(FILE *f)
 			cnt++;
 		}
 
+	}
+	if (checkcomplete) {
+		return cmpinfo(cnt);
 	}
 	txtrecheck=1;
 	return dumpinfo(cnt);
@@ -514,7 +577,7 @@ int main(int argc, char *argv[])
 	char *tmpenv;
 	ret = -1;
 
-	while ((ch = getopt(argc, argv, "adtxb:m:v:")) != -1){
+	while ((ch = getopt(argc, argv, "acdtxb:m:v:")) != -1){
 		switch (ch){
 			case 'a':
 				noaudioencode=1;
@@ -536,6 +599,9 @@ int main(int argc, char *argv[])
 				break;
 			case 'x':
 				cmdexecute=1;
+				break;
+			case 'c':
+				checkcomplete=1;
 				break;
 			default:
 				usage();
