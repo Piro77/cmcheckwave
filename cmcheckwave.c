@@ -316,7 +316,7 @@ int dumpinfo(int mcnt)
 		if (thumb) {
 			pre=0;
 			for(i=0;i<mcnt;i++) {
-				asprintf(&cptr,"%s -ao nul -ss %.2f -frames 1 -vo png  %s ; mv 00000001.png %s-%d.png",MPLAYERCMD,(pre + (m[i].stsec-pre)/2)/1000.0,wkfilename,wkfilename,i);
+				asprintf(&cptr,"%s -ao nul -ss %.2f -frames 1 -vo png:z=9  %s ; mv 00000001.png %s-%d.png",MPLAYERCMD,(pre + (m[i].stsec-pre)/2)/1000.0,wkfilename,wkfilename,i);
 				tclistpush2(cmdlist,cptr);
 				pre = m[i].stsec;
 			}
