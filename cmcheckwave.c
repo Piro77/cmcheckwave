@@ -63,12 +63,22 @@ static int txtrecheck=0;
 static int cmdexecute=0;
 static int checkcomplete=0;
 
-static char *MP4BOXCMD="/usr/local/bin/MP4Box -quiet -noprog";
 static char *MP4BOXCMDRAPSTR="Adjusting chunk start time to previous random access at ";
+#ifdef __FreeBSD__
+static char *MP4BOXCMD="/usr/local/bin/MP4Box";
 static char *SOXCMD="/usr/local/bin/sox";
 static char *FFMPEGCMD="/usr/local/bin/ffmpeg";
 static char *MPLAYERCMD="/usr/local/bin/mplayer";
 static char *AACENCCMD="/usr/local/bin/aacplusenc";
+static char *AACENCOPT="%s '%s.wav' '%s' 60";
+#else
+static char *MP4BOXCMD="mp4box";
+static char *SOXCMD="sox";
+static char *FFMPEGCMD="ffmpeg";
+static char *MPLAYERCMD="mplayer";
+static char *AACENCCMD="neroAacEnc";
+static char *AACENCOPT="%s -hev2 -br 60 -if '%s.wav' -of '%s'";
+#endif
 
 FILE *checkMP4(FILE *f,char *filename)
 {
@@ -83,8 +93,7 @@ FILE *checkMP4(FILE *f,char *filename)
 		return NULL;
 	}
 	// mp4ファイルだったら、ffmpegでwaveに変換し読み込む。
-	//sprintf(cmdbuf,"%s -v 0 -i %s -f wav pipe: 2>/dev/null",FFMPEGCMD,filename);
-	asprintf(&cmdbuf,"%s -v 0 -i %s -f wav pipe: 2>/dev/null",FFMPEGCMD,filename);
+	asprintf(&cmdbuf,"%s -v 0 -i '%s' -f wav pipe: 2>/dev/null",FFMPEGCMD,filename);
 	pp = popen(cmdbuf,"r");
 	if (pp == NULL) return NULL;
 	fclose(f);
@@ -110,7 +119,7 @@ int checkMP4RAP(int stsec,int edsec)
 
 	if (wkfilename==NULL) return stsec;
 
-	sprintf(cmdbuf,"%s -splitx %.2f:%.2f %s -out /dev/null",MP4BOXCMD,edsec/1000.0,(edsec+10000)/1000.0,wkfilename);
+	sprintf(cmdbuf,"%s -quiet -noprog -splitx %.2f:%.2f '%s' -out /dev/null",MP4BOXCMD,edsec/1000.0,(edsec+10000)/1000.0,wkfilename);
 
 	rap=0.0;
 	pp = popen(cmdbuf,"r");
@@ -145,7 +154,7 @@ int cmpinfo(int mcnt)
 
 	for(i=0;i<mcnt;i++) {
 		if (thumb) {
-			asprintf(&cmdptr,"rm -f %s-%d.png",wkfilename,i);
+			asprintf(&cmdptr,"rm -f '%s-%d.png'",wkfilename,i);
 			tclistpush2(cmdlist,cmdptr);
 			free(cmdptr);
 		}
@@ -164,11 +173,13 @@ int cmpinfo(int mcnt)
 		return 0;
 	}
 	fclose(fp);
-	asprintf(&cmdptr,"mv %s-new.mp4 %s",wkfilename,wkfilename);
+	free(cmdptr);
+
+	asprintf(&cmdptr,"mv '%s-new.mp4' '%s'",wkfilename,wkfilename);
 	tclistpush2(cmdlist,cmdptr);
 	free(cmdptr);
 
-	asprintf(&cmdptr,"rm -f %s-sh",wkfilename);
+	asprintf(&cmdptr,"rm -f '%s-sh'",wkfilename);
 	tclistpush2(cmdlist,cmdptr);
 	free(cmdptr);
 
@@ -232,7 +243,7 @@ int dumpinfo(int mcnt)
 	for(i=0;i<hcnt;i++) {
 		if (wkfilename) {
 			asprintf(&tfptr,"%s.%d%s",wkfilename,i,noaudioencode?".mp4":"");
-			asprintf(&cptr,"%s -splitx %.2f:%.2f %s -out %s",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0,wkfilename,tfptr);
+			asprintf(&cptr,"%s -quiet -noprog -splitx %.2f:%.2f '%s' -out '%s'",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0,wkfilename,tfptr);
 			tclistpush2(cmdlist,cptr);
 			tclistpush2(tflist,tfptr);
 			free(tfptr);
@@ -241,14 +252,14 @@ int dumpinfo(int mcnt)
 			if (!noaudioencode) {
 				asprintf(&tfptr,"%s.%d.wav",wkfilename,i);
 
-				asprintf(&cptr,"%s -v 0 -i %s.%d -vn %s",FFMPEGCMD,wkfilename,i,tfptr);
+				asprintf(&cptr,"%s -v 0 -i '%s.%d' -vn '%s'",FFMPEGCMD,wkfilename,i,tfptr);
 				tclistpush2(cmdlist,cptr);
 				tclistpush2(tflist,tfptr);
 				free(tfptr);
 				free(cptr);
 
 				asprintf(&tfptr,"%s.%d.mp4",wkfilename,i);
-				asprintf(&cptr,"%s -v 0 -i %s.%d -an -vcodec copy %s",FFMPEGCMD,wkfilename,i,tfptr);
+				asprintf(&cptr,"%s -v 0 -i '%s.%d' -an -vcodec copy '%s'",FFMPEGCMD,wkfilename,i,tfptr);
 				tclistpush2(cmdlist,cptr);
 				tclistpush2(tflist,tfptr);
 				free(tfptr);
@@ -256,7 +267,7 @@ int dumpinfo(int mcnt)
 			}
 		}
 		else {
-			asprintf(&cptr,"# %s -splitx %.2f:%.2f ",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0);
+			asprintf(&cptr,"# %s -quiet -noprog -splitx %.2f:%.2f ",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0);
 			tclistpush2(cmdlist,cptr);
 		}
 	}
@@ -265,50 +276,49 @@ int dumpinfo(int mcnt)
 			asprintf(&cptr2,"%s ",SOXCMD);
 			for(i=0;i<hcnt;i++) {
 				asprintf(&tfptr,"%s.%d.wav",wkfilename,i);
-				asprintf(&cptr,"%s %s ",cptr2,tfptr);
+				asprintf(&cptr,"%s '%s' ",cptr2,tfptr);
 				free(cptr2);
 				cptr2=cptr;
 				tclistpush2(tflist,tfptr);
 				free(tfptr);
 			}
 			asprintf(&tfptr,"%s.wav",wkfilename);
-			asprintf(&cptr,"%s %s",cptr2,tfptr);
+			asprintf(&cptr,"%s '%s'",cptr2,tfptr);
 			free(cptr2);
 			tclistpush2(cmdlist,cptr);
 			tclistpush2(tflist,tfptr);
 			free(tfptr);
 
 			asprintf(&tfptr,"%s.aac",wkfilename);
-			asprintf(&cptr,"%s %s.wav %s 60",AACENCCMD,wkfilename,tfptr);
+			asprintf(&cptr,AACENCOPT,AACENCCMD,wkfilename,tfptr);
 			tclistpush2(cmdlist,cptr);
 			free(cptr);
 			tclistpush2(tflist,tfptr);
 			free(tfptr);
 		}
-		//再チェックの場合-new.mp4ファイルを削除する
-		if (txtrecheck) {
-			asprintf(&cptr,"rm -f %s-new.mp4",wkfilename);
-			tclistpush2(cmdlist,cptr);
-			free(cptr);
-		}
-		asprintf(&cptr2,"%s",MP4BOXCMD);
+		//ファイル名-new.mp4ファイルを削除する
+		asprintf(&cptr,"rm -f '%s-new.mp4'",wkfilename);
+		tclistpush2(cmdlist,cptr);
+		free(cptr);
+
+		asprintf(&cptr2,"%s -quiet -noprog ",MP4BOXCMD);
 		for(i=0;i<hcnt;i++) {
-			asprintf(&cptr,"%s -cat %s.%d.mp4 ",cptr2,wkfilename,i);
+			asprintf(&cptr,"%s -cat '%s.%d.mp4' ",cptr2,wkfilename,i);
 			free(cptr2);
 			cptr2=cptr;
 		}
-		asprintf(&cptr,"%s %s-new.mp4",cptr2,wkfilename);
+		asprintf(&cptr,"%s '%s-new.mp4'",cptr2,wkfilename);
 		tclistpush2(cmdlist,cptr);
 		free(cptr);
 
 		if (!noaudioencode) {
-			asprintf(&cptr,"%s -add %s.aac %s-new.mp4",MP4BOXCMD,wkfilename,wkfilename);
+			asprintf(&cptr,"%s -quiet -noprog -add '%s.aac' '%s-new.mp4'",MP4BOXCMD,wkfilename,wkfilename);
 			tclistpush2(cmdlist,cptr);
 		}
 
 
 		for(i=0;i<tclistnum(tflist);i++) {
-			asprintf(&cptr,"rm -f %s",tclistval2(tflist,i));
+			asprintf(&cptr,"rm -f '%s'",tclistval2(tflist,i));
 			tclistpush2(cmdlist,cptr);
 			free(cptr);
 		}
@@ -316,7 +326,7 @@ int dumpinfo(int mcnt)
 		if (thumb) {
 			pre=0;
 			for(i=0;i<mcnt;i++) {
-				asprintf(&cptr,"%s -ao nul -ss %.2f -frames 1 -vo png:z=9  %s ; mv 00000001.png %s-%d.png",MPLAYERCMD,(pre + (m[i].stsec-pre)/2)/1000.0,wkfilename,wkfilename,i);
+				asprintf(&cptr,"%s -ao null -ss %.2f -frames 1 -vo png:z=9  '%s' ; mv 00000001.png '%s-%d.png'",MPLAYERCMD,(pre + (m[i].stsec-pre)/2)/1000.0,wkfilename,wkfilename,i);
 				tclistpush2(cmdlist,cptr);
 				pre = m[i].stsec;
 			}
@@ -619,7 +629,8 @@ int main(int argc, char *argv[])
 	if (tmpenv=getenv("MP4BOX")) MP4BOXCMD=tmpenv;
 	if (tmpenv=getenv("MP4BOXCMDRAPSTR")) MP4BOXCMDRAPSTR=tmpenv;
 	if (tmpenv=getenv("AACENC")) AACENCCMD=tmpenv;
-	if (tmpenv=getenv("MPLAYERCMD")) MPLAYERCMD=tmpenv;
+	if (tmpenv=getenv("AACENCPOT")) AACENCOPT=tmpenv;
+	if (tmpenv=getenv("MPLAYER")) MPLAYERCMD=tmpenv;
 
 	ret=0;
 	p=NULL;

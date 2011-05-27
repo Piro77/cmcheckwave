@@ -1,15 +1,16 @@
 
 ・準備するもの
   ffmpeg 動画からの音声抽出に使います。
-         環境変数 FFMPEGCMD で指定可能
+         環境変数 FFMPEG で指定可能
   mp4box mp4ファイルの分割に使用
-         環境変数 MP4BOXCMD で指定可能
+         環境変数 MP4BOX で指定可能
   sox    分割したwaveファイルを結合するのに利用
-         環境変数 SOXCMD で指定可能
+         環境変数 SOX で指定可能
   aacplusenc 結合したwaveファイルをaacエンコードするのに利用
-         環境変数 AACENCCMD で指定可能
+         環境変数 AACENC で指定可能
+	          AACENCPOT でオプション指定可能
   mplayer サムネイル出力に利用
-         環境変数 MPLAYERCMD で指定可能
+         環境変数 MPLAYER で指定可能
 
 ・使い方
   waveファイルを読み込み判定
