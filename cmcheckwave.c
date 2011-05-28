@@ -169,15 +169,17 @@ int cmpinfo(int mcnt)
 	}
 	fread(readbuf,sizeof(readbuf),1,fp);
 	if (!strstr(readbuf+4,"ftypisom")) {
-		//mp4じゃない感じ
-		return 0;
+		//mp4じゃない感じ(置き換えないときは無視)
+		if (checkcomplete == 1) return 0;
 	}
 	fclose(fp);
 	free(cmdptr);
 
-	asprintf(&cmdptr,"mv '%s-new.mp4' '%s'",wkfilename,wkfilename);
-	tclistpush2(cmdlist,cmdptr);
-	free(cmdptr);
+	if (checkcomplete==1) { //元ファイル置き換え
+		asprintf(&cmdptr,"mv '%s-new.mp4' '%s'",wkfilename,wkfilename);
+		tclistpush2(cmdlist,cmdptr);
+		free(cmdptr);
+	}
 
 	asprintf(&cmdptr,"rm -f '%s-sh'",wkfilename);
 	tclistpush2(cmdlist,cmdptr);
@@ -394,7 +396,7 @@ int rechecktext(FILE *f)
 		}
 
 	}
-	if (checkcomplete) {
+	if (checkcomplete > 0) {
 		return cmpinfo(cnt);
 	}
 	txtrecheck=1;
@@ -587,7 +589,7 @@ int main(int argc, char *argv[])
 	char *tmpenv;
 	ret = -1;
 
-	while ((ch = getopt(argc, argv, "acdtxb:m:v:")) != -1){
+	while ((ch = getopt(argc, argv, "adtxb:m:v:c:")) != -1){
 		switch (ch){
 			case 'a':
 				noaudioencode=1;
@@ -611,7 +613,8 @@ int main(int argc, char *argv[])
 				cmdexecute=1;
 				break;
 			case 'c':
-				checkcomplete=1;
+				checkcomplete=atoi(optarg);
+				if (checkcomplete <= 0 && checkcomplete > 2) usage();
 				break;
 			default:
 				usage();
