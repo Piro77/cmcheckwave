@@ -1,0 +1,38 @@
+#!/bin/sh
+echo "CHANNEL : $CHANNEL"
+echo "DURATION: $DURATION"
+echo "OUTPUT  : $OUTPUT"
+echo "TUNER : $TUNER"
+echo "TYPE : $TYPE"
+echo "MODE : $MODE"
+echo "SID  : $SID"
+
+RECORDER=/usr/local/bin/recpt1
+
+# fail safe
+case $CHANNEL in
+    101|102|191|192|193)
+	if [ $SID = 'hd' ]; then
+	    SID=$CHANNEL
+	fi ;;
+esac
+if [ -z $SID ]; then
+    SID='hd'
+fi
+
+if [ ${MODE} = 0 ]; then
+   # MODE=0では必ず無加工のTSを吐き出すこと
+   $RECORDER --b25 --strip $CHANNEL $DURATION ${OUTPUT} >/dev/null
+elif [ ${MODE} = 1 ]; then
+   # 目的のSIDのみ残す
+   $RECORDER --b25 --strip --sid $SID $CHANNEL $DURATION ${OUTPUT} >/dev/null
+elif [ ${MODE} = 2 ]; then
+   # CMカットmp4サンプル
+   $RECORDER $CHANNEL $DURATION ${OUTPUT}.tmp.ts --b25 --strip >/dev/null &
+   sleep 30
+   cat ${OUTPUT}.tmp.ts | nice -n 20 ffmpeg -i - -f mp4 -deinterlace -vcodec libx264 -vpre libx264-faster -r 30000/1001 -aspect 16:9 -s 768x432 -crf 28 -acodec copy  ${OUTPUT}
+   /usr/local/bin/cmcheckwave -t -x  ${OUTPUT} > ${OUTPUT}-sh
+   if [ -f ${OUTPUT} -a -s ${OUTPUT} ]; then
+   	rm -f ${OUTPUT}.tmp.ts
+   fi
+fi

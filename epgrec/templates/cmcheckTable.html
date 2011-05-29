@@ -1,0 +1,258 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>CMカットチェック {$sitetitle}</title>
+<meta http-equiv="Content-Style-Type" content="text/css">
+
+{literal}
+<script type="text/javascript" src="js/jquery-1.3.2.min.js"></script>
+<script type="text/javascript" src="js/jquery-ui-1.7.2.custom.min.js"></script>
+<link rel="stylesheet" href="start/jquery-ui-1.7.2.custom.css" type="text/css">
+
+<script type="text/javascript">
+<!--
+	var PRG = {
+		
+		imgdialog:function(id,img){
+			var str;
+			str = '<img src="' + img +  '" />';
+			$('#floatBox4Dialog').dialog({title:'確認'});
+			$('#floatBox4Dialog').html(str);
+			$('#floatBox4Dialog').dialog('open', 'center');
+			
+	  	},
+		dialog:function(id, title, mode){
+			$('#floatBox4Dialog').dialog({title:'確認'});
+			var str;
+			str  = '<div class="prg_title">' + title + '</div>';
+			if (mode == 1) {
+			str += '<input type="hidden" name="reserve_id" id="id_reserve_id" value="' + id +  '" />';
+			str += '<input type="hidden" name="cmcheckval" id="id_cmcheckval" value=0 />';
+			str += '<input type="hidden" name="optvol" id="id_optvol" value=0 />';
+			str += '<input type="hidden" name="optdif" id="id_optdif" value=0 />';
+			str += '<div style="margin:2em 0 1em 0;text-align:center;"><a href="javascript:PRG.recut(1)" class="ui-state-default ui-corner-all ui-dialog-buttonpane button">CMチェックボックスの内容で再度分割を実施</a></div>';
+			}
+			else {
+				str  = '<div class="prg_title">パラメータ再分割</div>';
+				str += '<input type="hidden" name="reserve_id" id="id_reserve_id" value="' + id +  '" />';
+				str += '<input type="hidden" name="cmcheckval" id="id_cmcheckval" value=0 />';
+				str += '無音検知ボリューム(デフォルト9)<select name="optvol" id="id_optvol">';
+				str += ' <option value="7">7</option>';
+				str += ' <option value="8">8</option>';
+				str += ' <option value="9" selected>9</option>';
+				str += ' <option value="10">10</option>';
+				str += ' <option value="11">11</option>';
+				str += ' <option value="12">12</option>';
+				str += '</select><BR>';
+				str += '無音検知間隔(デフォルト250)<select name="optdif" id="id_optdif">';
+				str += ' <option value="150">150</option>';
+				str += ' <option value="200">200</option>';
+				str += ' <option value="250" selected>250</option>';
+				str += ' <option value="300">300</option>';
+				str += '</select>ms<BR><BR>';
+				str += '本編にCMが含まれてしまっている場合などに再指定し分割します<BR>';
+				str += 'ボリュームを+するか間隔を短くすることで正常に検知されるようになると思われます。<BR>';
+			str += '<div style="margin:2em 0 1em 0;text-align:center;"><a href="javascript:PRG.recut(2)" class="ui-state-default ui-corner-all ui-dialog-buttonpane button">指定パラメータで元ファイルから再分割します。</a></div>';
+			}
+			$('#floatBox4Dialog').html(str);
+			$('#floatBox4Dialog').dialog('open', 'center');
+		},
+		recut:function(mode){
+			var id_reserve_id = $('#id_reserve_id').val();
+			var tblstr="";
+			if (mode == 1) {
+				var elem = document.cmtbl.elements.length;
+				for(i=0;i<elem;i++) {
+					if (tblstr!="")
+						tblstr=tblstr + ",";
+					if (document.cmtbl.elements[i].checked)
+						tblstr=tblstr + "1";
+					else
+						tblstr=tblstr + "0";
+				}
+			}
+			var id_optvol = $('#id_optvol').val();
+			var id_optdif = $('#id_optdif').val();
+			var str;
+			str  = '<div class="prg_title">再分割中・・・・</div>';
+			str += '<div>しばらくお待ちください。(完了後自動でクローズします。)</div>';
+			$('#floatBox4Dialog').dialog('close');
+			$('#floatBox4Dialog').html(str);
+			$('#floatBox4Dialog').dialog('open', 'center');
+			$.post('cmcheckExec.php', { reserve_id: id_reserve_id, checkval: tblstr ,optvol: id_optvol,optdif: id_optdif } , function( data ) {
+				if(data.match(/^error/i)){
+					$('#floatBox4Dialog').dialog('close');
+					alert(data);
+				}
+				else {
+//					alert(data);
+					//$('#resid_' + id ).hide();
+					$('#floatBox4Dialog').dialog('close');
+					location.reload(true);
+				}
+			});
+		},
+		editdialog:function(id,mode) {
+			var str;
+			if (mode == 1) {
+			str  = '<div class="prg_title">録画ID:' + id + '</div>';
+			str += 'ファイルの置き換えを実施しない。<input type="checkbox" id="id_replace" name="replace" value="1"><BR>';
+			str += '<input type="hidden" name="reserve_id" id="id_reserve_id" value="' + id +  '" />';
+			str += '<input type="hidden" name="cmcheckcomplete" id="id_cmcheckcomplete" value=1 />';
+			str += '<div style="margin:2em 0 1em 0;text-align:center;"><a href="javascript:PRG.edit()" class="ui-state-default ui-corner-all ui-dialog-buttonpane button">　cmcheck完了　</a></div>';
+			}
+			else {
+			}
+			
+			$('#floatBox4Dialog').html(str);
+			$('#floatBox4Dialog').dialog('open','center');
+		},
+		edit:function() {
+			var id_reserve_id = $('#id_reserve_id').val();
+			var id_cmcheckcomplete = $('#id_cmcheckcomplete').val();
+			var id_replace = $('#id_replace').is(':checked');
+			var str;
+
+			$.post('cmcheckExec.php', { reserve_id: id_reserve_id,cmcheckcomplete: id_cmcheckcomplete,replace: id_replace } , function( data ) {
+				if(data.match(/^error/i)){
+					alert(data);
+					$('#floatBox4Dialog').dialog('close');
+
+				}
+				else {
+					$('#floatBox4Dialog').dialog('close');
+					location.reload(true);
+				}
+			});
+	     }
+
+	}
+	$(document).ready(function () {
+		var DG = $('#floatBox4Dialog');
+		DG.dialog({width:'auto'});
+		DG.dialog({modal:true});
+		DG.dialog('close');
+	});
+-->
+</script>
+
+
+<style type="text/css">
+<!--
+body {padding:4px;margin:0;font-size:10pt;}
+a {text-decoration:none;}
+
+table#reservation_table {
+    width: 800px;
+    border: 1px #BBB solid;
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+table#cmcheck_table th {
+    padding: 5px;
+    border: #E3E3E3 solid;
+    border-width: 0 0 1px 1px;
+    background: #BBB;
+    font-weight: bold;
+    line-height: 120%;
+    text-align: center;
+}
+table#reservation_table td {
+    padding: 5px;
+    border: 1px #BBB solid;
+    border-width: 0 0 1px 1px;
+    text-align: center;
+}
+
+table#reservation_table tr.ctg_news, #category_select a.ctg_news {background-color: #FFFFD8;}
+table#reservation_table tr.ctg_etc, #category_select a.ctg_etc {background-color: #FFFFFF;}
+table#reservation_table tr.ctg_information, #category_select a.ctg_information {background-color: #F2D8FF;}
+table#reservation_table tr.ctg_sports, #category_select a.ctg_sports {background-color: #D8FFFF;}
+table#reservation_table tr.ctg_cinema, #category_select a.ctg_cinema {background-color: #FFD8D8;}
+table#reservation_table tr.ctg_music, #category_select a.ctg_music {background-color: #D8D8FF;}
+table#reservation_table tr.ctg_drama, #category_select a.ctg_drama {background-color: #D8FFD8;}
+table#reservation_table tr.ctg_anime, #category_select a.ctg_anime {background-color: #FFE4C8;}
+table#reservation_table tr.ctg_variety, #category_select a.ctg_variety {background-color: #FFD2EB;}
+table#reservation_table tr.ctg_10, #category_select a.ctg_10 {background-color: #E4F4F4;}
+table#reservation_table tr.prg_rec  {background-color: #F55;color:#FEE}
+
+
+-->
+</style>
+{/literal}
+
+</head>
+
+<body>
+
+	<h2>{$sitetitle}</h2>
+
+	<div><a href="viewer.php?reserve_id={$reserveid}">録画済みファイルを視聴</a></div>
+{if count($cmary)}
+	<div><a href="viewer.php?reserve_id={$reserveid}&cmcheckext=1">CMカット済みファイルを視聴</a></div>
+{/if}
+	<BR>
+
+<div><a href="recordedTable.php">録画済一覧へ</a>/<a href="index.php">番組表へ</a></div>
+	<BR>
+
+{if count($cmary)}
+<div>
+	cmcheck完了：録画済みファイルを置き換え<input type="submit" value="cmcheck完了" onClick="javascript:PRG.editdialog('{$reserveid}',1)"/>
+</div>
+<BR>
+<div>
+	チェックボックスのチェック内容で再度分割します。<input type="submit" value="再分割実施" onClick="javascript:PRG.dialog('{$reserveid}','{$sitetitle}',1)"/>
+</div>
+<BR>
+<table id="cmcheck_table">
+ <tr>
+  <th>id</th>
+  <th>開始位置</th>
+  <th>間隔</th>
+  <th>CM</th>
+  <th>サムネイル</th>
+ </tr>
+
+{foreach from=$cmary item=keyword}
+<form name="cmtbl">
+ <tr id="keyid_{$keyword.id}">
+  <td>{$keyword.id}</td>
+  <td>{$keyword.start}</td>
+  <td>{$keyword.diff}</td>
+  <td><input type="checkbox" id="iscm" name="iscm" value="1" {if $keyword.cm == CM } checked {/if}/>{$keyword.cm}</td>
+  <td><img width="128" height="72" src="{$keyword.thumb}"  onClick="javascript:PRG.imgdialog('{$keyword.id}','{$keyword.thumb}')""/></td>
+ </tr>
+{/foreach}
+</table>
+</form>
+{else}
+  CMチェック用ファイルはありません
+{/if}
+<BR>
+<BR>
+<div>
+	分割パラメータを変更し再度分割します。<BR>CMが本編内に埋まっているなどチェックボックス設定では対応できない場合実施します。<BR><input type="submit" value="元ファイルから再分割" onClick="javascript:PRG.dialog('{$reserveid}','{$sitetitle}',2)"/>
+</div>
+<BR>
+
+<div id="floatBox4Dialog">jQuery UI Dialog</div>
+
+{literal}
+<script type="text/javascript">
+var INISet = {
+	prgRecordURL : 'xxrecord.php',			// 簡易予約
+	prgRecordPlusURL : 'xxrecordp.php',		// 詳細予約
+	prgCancelURL : 'xxcancelReservation.php'		// 予約キャンセル
+}
+</script>
+{/literal}
+
+</body>
+</html>
+
+

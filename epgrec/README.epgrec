@@ -1,0 +1,14 @@
+epgrec利用時にCMカットをwebインターフェースから実施するサンプル
+
+README.epgrec
+
+Cmcheck.class.php	CMチェックに使う簡単なクラス
+cmcheckTable.php	CMチェック用管理画面用ファイル
+cmcheckExec.php		CMチェックコマンド実行用スクリプト
+viewer.php		追加引数でCMカット済みファイル視聴
+do-record.sh.sample	録画コマンドサンプル
+
+templates/
+recordedTable.html	録画済み画面テンプレ(cmcheckリンクを追加)
+cmcheckTable.html	cmcheckリンク先のCMカット管理画面テンプレ
+
