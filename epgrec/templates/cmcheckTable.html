@@ -191,9 +191,9 @@ table#reservation_table tr.prg_rec  {background-color: #F55;color:#FEE}
 
 	<h2>{$sitetitle}</h2>
 
-	<div><a href="viewer.php?reserve_id={$reserveid}">録画済みファイルを視聴</a></div>
+	<div><a href="viewer.php?reserve_id={$reserveid}">録画済みファイルを視聴</a> <a href="{$fileurl}">mp4-link</a> {$mp4info}</div>
 {if count($cmary)}
-	<div><a href="viewer.php?reserve_id={$reserveid}&cmcheckext=1">CMカット済みファイルを視聴</a></div>
+<div><a href="viewer.php?reserve_id={$reserveid}&cmcheckext=1">CMカット済みファイルを視聴</a> <a href="{$fileurl}-new.mp4">mp4-link</a> {$mp4info2}</div>
 {/if}
 	<BR>
 

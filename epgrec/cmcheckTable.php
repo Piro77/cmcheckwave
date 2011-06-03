@@ -36,32 +36,30 @@ try{
 	
 	$cm = new Cmcheck( $reserve_id );
 
+	$recfile = $cm->getrecfilename();
+	if (file_exists($recfile)) {
+		$st=stat($recfile);
+		$mp4info=sprintf("(%.2f MB %s)",$st['size']/1024/1024,date("Y/m/d H:i:s",$st['mtime']));
+	}
+	$recfile = $recfile . "-new.mp4";
+	if (file_exists($recfile)) {
+		$st=stat($recfile);
+		$mp4info2=sprintf("(%.2f MB %s)",$st['size']/1024/1024,date("Y/m/d H:i:s",$st['mtime']));
+	}
+
 }
 catch(exception $e ) {
 	exit( $e->getMessage() );
 }
 
-$optvol['7'] = '7';
-$optvol['8'] = '8';
-$optvol['9'] = '9';
-$optvol['10'] = '10';
-$optvol['11'] = '11';
-
-$optdul['100'] = '100';
-$optdul['150'] = '150';
-$optdul['200'] = '200';
-$optdul['250'] = '250';
-$optdul['300'] = '300';
-
 $smarty = new Smarty();
 
 $smarty->assign( "cmary", $cm->getdata() );
+$smarty->assign( "fileurl", $cm->getfileurl() );
 $smarty->assign( "sitetitle", $title );
 $smarty->assign( "reserveid", $reserve_id );
-$smarty->assign( 'optvolArray' , $optvol);
-$smarty->assign( 'optdulArray' , $optdul);
-$smarty->assign( 'selectVol'   , '9');
-$smarty->assign( 'selectDul'   , '250');
+$smarty->assign( 'mp4info' ,  $mp4info);
+$smarty->assign( 'mp4info2' , $mp4info2);
 $smarty->assign( 'cmcheckbox'  , array('CM' => 'CM')); 
 
 $smarty->display( "cmcheckTable.html" );

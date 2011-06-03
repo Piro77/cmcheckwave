@@ -11,6 +11,7 @@ class Cmcheck {
 protected $filename;
 protected $recfilename;
 protected $basefilename;
+protected $fileurl;
 protected $settings;
 protected $lines;
 protected $cmdata;
@@ -33,6 +34,7 @@ function __construct( $reserve_id = null ) {
 
 	$this->filename = INSTALL_PATH .$this->settings->spool . "/". $this->rrec->path . "-sh";
 	$this->recfilename = INSTALL_PATH .$this->settings->spool . "/". $this->rrec->path;
+	$this->fileurl = $settings->install_url .$this->settings->spool . "/". $this->rrec->path;
 
 
 	if( file_exists( $this->filename )) {
@@ -56,7 +58,7 @@ function __construct( $reserve_id = null ) {
                                 $itm = explode(" ",$line);
                                 $ary = array();
                                 $ary['id']=$itmcnt;
-				$ary['start']=$itm[1];
+				$ary['start']=gmdate("H:i:s",round($itm[1]));
                                 $ary['end']=$itm[2];
                                 $ary['diff']=$itm[4];
                                 $ary['cm']=trim($itm[5]);
@@ -85,6 +87,9 @@ function getrecfilename() {
 }
 function getfilename() {
 	return $this->filename;
+}
+function getfileurl() {
+	return $this->fileurl;
 }
 function putdata($newcm)
 {
