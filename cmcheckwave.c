@@ -180,6 +180,11 @@ int cmpinfo(int mcnt)
 		tclistpush2(cmdlist,cmdptr);
 		free(cmdptr);
 	}
+	if (checkcomplete==2) { //CMカットファイル削除
+		asprintf(&cmdptr,"rm -f '%s-new.mp4'",wkfilename);
+		tclistpush2(cmdlist,cmdptr);
+		free(cmdptr);
+	}
 
 	asprintf(&cmdptr,"rm -f '%s-sh'",wkfilename);
 	tclistpush2(cmdlist,cmdptr);
