@@ -59,6 +59,7 @@ function __construct( $reserve_id = null ) {
                                 $ary = array();
                                 $ary['id']=$itmcnt;
 				$ary['start']=gmdate("H:i:s",round($itm[1]));
+				$ary['startsv']=$itm[1];
                                 $ary['end']=$itm[2];
                                 $ary['diff']=$itm[4];
                                 $ary['cm']=trim($itm[5]);
@@ -110,7 +111,7 @@ function putdata($newcm)
 		else
 			$cmval = "";
 		fprintf($fp,"# %s %s diff %s %s\n",
-			$data['start'],$data['end'],$data['diff'],$cmval);
+			$data['startsv'],$data['end'],$data['diff'],$cmval);
 		$cnt++;
 	}
 	fprintf($fp,"%s\n",$this->totalline);
