@@ -71,6 +71,7 @@ static char *FFMPEGCMD="/usr/local/bin/ffmpeg";
 static char *MPLAYERCMD="/usr/local/bin/mplayer";
 static char *AACENCCMD="/usr/local/bin/aacplusenc";
 static char *AACENCOPT="%s '%s.wav' '%s' 60";
+static char *FAADCMD=NULL;
 #else
 static char *MP4BOXCMD="mp4box";
 static char *SOXCMD="sox";
@@ -78,6 +79,7 @@ static char *FFMPEGCMD="ffmpeg";
 static char *MPLAYERCMD="mplayer";
 static char *AACENCCMD="neroAacEnc";
 static char *AACENCOPT="%s -hev2 -br 60 -if '%s.wav' -of '%s'";
+static char *FAADCMD=NULL;
 #endif
 
 FILE *checkMP4(FILE *f,char *filename)
@@ -94,6 +96,10 @@ FILE *checkMP4(FILE *f,char *filename)
 	}
 	// mp4ファイルだったら、ffmpegでwaveに変換し読み込む。
 	asprintf(&cmdbuf,"%s -v 0 -i '%s' -f wav pipe: 2>/dev/null",FFMPEGCMD,filename);
+#if 0
+	// FFMPEG-> aac-> faad ?
+	asprintf(&cmdbuf,"%s -d -w -q '%s%'",FAADCMD,filename);
+#endif
 	pp = popen(cmdbuf,"r");
 	if (pp == NULL) return NULL;
 	fclose(f);
@@ -259,11 +265,19 @@ int dumpinfo(int mcnt)
 			if (!noaudioencode) {
 				asprintf(&tfptr,"%s.%d.wav",wkfilename,i);
 
-				asprintf(&cptr,"%s -v 0 -i '%s.%d' -vn '%s'",FFMPEGCMD,wkfilename,i,tfptr);
+				if (FAADCMD)
+					asprintf(&cptr,"%s -v 0 -i '%s.%d' -vn -acodec copy '%s.aac';%s -d -q -o '%s' '%s.aac' ",FFMPEGCMD,wkfilename,i,tfptr,FAADCMD,tfptr,tfptr);
+				else
+					asprintf(&cptr,"%s -v 0 -i '%s.%d' -vn '%s'",FFMPEGCMD,wkfilename,i,tfptr);
 				tclistpush2(cmdlist,cptr);
 				tclistpush2(tflist,tfptr);
 				free(tfptr);
 				free(cptr);
+				if (FAADCMD) {
+					asprintf(&tfptr,"%s.%d.wav.aac",wkfilename,i);
+					tclistpush2(tflist,tfptr);
+					free(tfptr);
+				}
 
 				asprintf(&tfptr,"%s.%d.mp4",wkfilename,i);
 				asprintf(&cptr,"%s -v 0 -i '%s.%d' -an -vcodec copy '%s'",FFMPEGCMD,wkfilename,i,tfptr);
@@ -280,7 +294,7 @@ int dumpinfo(int mcnt)
 	}
 	if (wkfilename) {
 		if (!noaudioencode) {
-			asprintf(&cptr2,"%s ",SOXCMD);
+			asprintf(&cptr2,"%s --norm ",SOXCMD);
 			for(i=0;i<hcnt;i++) {
 				asprintf(&tfptr,"%s.%d.wav",wkfilename,i);
 				asprintf(&cptr,"%s '%s' ",cptr2,tfptr);
@@ -639,6 +653,7 @@ int main(int argc, char *argv[])
 	if (tmpenv=getenv("AACENC")) AACENCCMD=tmpenv;
 	if (tmpenv=getenv("AACENCPOT")) AACENCOPT=tmpenv;
 	if (tmpenv=getenv("MPLAYER")) MPLAYERCMD=tmpenv;
+	if (tmpenv=getenv("FAADCMD")) FAADCMD=tmpenv;
 
 	ret=0;
 	p=NULL;
