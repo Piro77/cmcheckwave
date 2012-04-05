@@ -14,7 +14,17 @@ Usage: cmcheckwave filename.wav
 
 #include "tclist.h"
 
-static void usage(void){
+static void usage(char *cmd){
+	fprintf(stderr,"Check CM from wavefile(output cmd stdout)\n");
+	fprintf(stderr,"%s: filename.wav\n\n",cmd);
+	fprintf(stderr,"Check CM from mp4file(require ffmpeg cmd)\n");
+	fprintf(stderr,"%s: filename.mp4\n\n",cmd);
+	fprintf(stderr,"Check CM from mp4file and execute cutcmd(create new filename.mp4-new.mp4) \n");
+	fprintf(stderr,"%s: -x filename.mp4\n\n",cmd);
+	fprintf(stderr,"Check CM and manual edit\n");
+	fprintf(stderr,"%s: -b filename.mp4 filename.mp4 > filename-sh\n",cmd);
+	fprintf(stderr,"Edit filename-sh for mis detection and re execute next cmd\n",cmd);
+	fprintf(stderr,"%s: -x filename-sh\n",cmd);
 	exit(1);
 }
 
@@ -196,6 +206,10 @@ int cmpinfo(int mcnt)
 	tclistpush2(cmdlist,cmdptr);
 	free(cmdptr);
 
+	asprintf(&cmdptr,"rm -f '%s.split.log'",wkfilename);
+	tclistpush2(cmdlist,cmdptr);
+	free(cmdptr);
+
 	for(i=0;i<tclistnum(cmdlist);i++) {
 		if (cmdexecute) {
 			FILE *pp;
@@ -253,10 +267,15 @@ int dumpinfo(int mcnt)
 
 	cmdlist = tclistnew();
 	tflist = tclistnew();
+	if (wkfilename) {
+		asprintf(&cptr,"rm -f '%s.split.log'",wkfilename);
+		tclistpush2(cmdlist,cptr);
+		free(cptr);
+	}
 	for(i=0;i<hcnt;i++) {
 		if (wkfilename) {
 			asprintf(&tfptr,"%s.%d%s",wkfilename,i,noaudioencode?".mp4":"");
-			asprintf(&cptr,"%s -quiet -noprog -splitx %.2f:%.2f '%s' -out '%s'",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0,wkfilename,tfptr);
+			asprintf(&cptr,"%s -quiet -noprog -splitx %.2f:%.2f '%s' -out '%s' >> '%s.split.log'",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0,wkfilename,tfptr,wkfilename);
 			tclistpush2(cmdlist,cptr);
 			tclistpush2(tflist,tfptr);
 			free(tfptr);
@@ -605,9 +624,10 @@ int main(int argc, char *argv[])
 	int i,ch;
 	FILE *f,*p;
 	int ret;
-	char *tmpenv;
+	char *tmpenv,*argv0;
 	ret = -1;
 
+	argv0 = argv[0];
 	while ((ch = getopt(argc, argv, "adtxb:m:v:c:")) != -1){
 		switch (ch){
 			case 'a':
@@ -633,17 +653,17 @@ int main(int argc, char *argv[])
 				break;
 			case 'c':
 				checkcomplete=atoi(optarg);
-				if (checkcomplete <= 0 && checkcomplete > 2) usage();
+				if (checkcomplete <= 0 && checkcomplete > 2) usage(argv0);
 				break;
 			default:
-				usage();
+				usage(argv0);
 		}
 	}
 	argc -= optind;
 	argv += optind;
 
 	if (argc != 1) {
-		usage();
+		usage(argv0);
 		return 0;
 	}
 	if (tmpenv=getenv("FFMPEG")) FFMPEGCMD=tmpenv;
