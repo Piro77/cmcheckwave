@@ -62,6 +62,26 @@ void *tcmyfatal(const char *message);
     free(TC_ptr); \
   } while(false)
 
+/* Alias of `tclistpush'. */
+#define TCLISTPUSH(TC_list, TC_ptr, TC_size) \
+  do { \
+    int TC_mysize = (TC_size); \
+    int TC_index = (TC_list)->start + (TC_list)->num; \
+    if(TC_index >= (TC_list)->anum){ \
+      (TC_list)->anum += (TC_list)->num + 1; \
+      TCREALLOC((TC_list)->array, (TC_list)->array, \
+                (TC_list)->anum * sizeof((TC_list)->array[0])); \
+    } \
+    TCLISTDATUM *array = (TC_list)->array; \
+    TCMALLOC(array[TC_index].ptr, TC_mysize + 1);     \
+    memcpy(array[TC_index].ptr, (TC_ptr), TC_mysize); \
+    array[TC_index].ptr[TC_mysize] = '\0'; \
+    array[TC_index].size = TC_mysize; \
+    (TC_list)->num++; \
+  } while(false)
+
+
+
 
 
 

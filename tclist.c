@@ -110,3 +110,19 @@ void *tcmyfatal(const char *message){
   return NULL;
 }
 
+TCLIST *tcstrsplit(const char *str, const char *delims){
+  assert(str && delims);
+  TCLIST *list = tclistnew();
+  while(true){
+    const char *sp = str;
+    while(*str != '\0' && !strchr(delims, *str)){
+      str++;
+    }
+    TCLISTPUSH(list, sp, str - sp);
+    if(*str == '\0') break;
+    str++;
+  }
+  return list;
+}
+
+
