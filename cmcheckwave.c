@@ -105,11 +105,11 @@ FILE *checkMP4(FILE *f,char *filename)
 		return NULL;
 	}
 	// mp4ファイルだったら、ffmpegでwaveに変換し読み込む。
-	asprintf(&cmdbuf,"%s -v 0 -i '%s' -f wav pipe: 2>/dev/null",FFMPEGCMD,filename);
-#if 0
-	// FFMPEG-> aac-> faad ?
-	asprintf(&cmdbuf,"%s -d -w -q '%s%'",FAADCMD,filename);
-#endif
+	if (FAADCMD)
+	    asprintf(&cmdbuf,"%s -d -w -q '%s'",FAADCMD,filename);
+    else
+	    asprintf(&cmdbuf,"%s -v 0 -i '%s' -f wav pipe: 2>/dev/null",FFMPEGCMD,filename);
+
 	pp = popen(cmdbuf,"r");
 	if (pp == NULL) return NULL;
 	fclose(f);
@@ -285,18 +285,13 @@ int dumpinfo(int mcnt)
 				asprintf(&tfptr,"%s.%d.wav",wkfilename,i);
 
 				if (FAADCMD)
-					asprintf(&cptr,"%s -v 0 -i '%s.%d' -vn -acodec copy '%s.aac';%s -d -q -o '%s' '%s.aac' ",FFMPEGCMD,wkfilename,i,tfptr,FAADCMD,tfptr,tfptr);
+					asprintf(&cptr,"%s -d -q -o '%s' '%s.%d' ",FAADCMD,tfptr,wkfilename,i);
 				else
 					asprintf(&cptr,"%s -v 0 -i '%s.%d' -vn '%s'",FFMPEGCMD,wkfilename,i,tfptr);
 				tclistpush2(cmdlist,cptr);
 				tclistpush2(tflist,tfptr);
 				free(tfptr);
 				free(cptr);
-				if (FAADCMD) {
-					asprintf(&tfptr,"%s.%d.wav.aac",wkfilename,i);
-					tclistpush2(tflist,tfptr);
-					free(tfptr);
-				}
 
 				asprintf(&tfptr,"%s.%d.mp4",wkfilename,i);
 				asprintf(&cptr,"%s -v 0 -i '%s.%d' -an -vcodec copy '%s'",FFMPEGCMD,wkfilename,i,tfptr);
