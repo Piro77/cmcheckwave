@@ -17,7 +17,7 @@ Usage: cmcheckwave filename.wav
 static void usage(char *cmd){
 	fprintf(stderr,"Check CM from wavefile(output cmd stdout)\n");
 	fprintf(stderr,"%s: filename.wav\n\n",cmd);
-	fprintf(stderr,"Check CM from mp4file(require ffmpeg cmd)\n");
+	fprintf(stderr,"Check CM from mp4file(require ffmpeg or faad cmd)\n");
 	fprintf(stderr,"%s: filename.mp4\n\n",cmd);
 	fprintf(stderr,"Check CM from mp4file and execute cutcmd(create new filename.mp4-new.mp4) \n");
 	fprintf(stderr,"%s: -x filename.mp4\n\n",cmd);
@@ -72,6 +72,7 @@ static int thumb=0;
 static int txtrecheck=0;
 static int cmdexecute=0;
 static int checkcomplete=0;
+static int basets=0;
 
 static char *MP4BOXCMDRAPSTR="Adjusting chunk start time to previous random access at ";
 #ifdef __FreeBSD__
@@ -81,7 +82,8 @@ static char *FFMPEGCMD="/usr/local/bin/ffmpeg";
 static char *MPLAYERCMD="/usr/local/bin/mplayer";
 static char *AACENCCMD="/usr/local/bin/aacplusenc";
 static char *AACENCOPT="%s '%s.wav' '%s' 60";
-static char *FAADCMD=NULL;
+static char *FAADCMD="/usr/local/bin/faad";
+static char *FIXASS="/usr/home/piro/bin/fixass";
 #else
 static char *MP4BOXCMD="mp4box";
 static char *SOXCMD="sox";
@@ -90,6 +92,7 @@ static char *MPLAYERCMD="mplayer";
 static char *AACENCCMD="neroAacEnc";
 static char *AACENCOPT="%s -hev2 -br 60 -if '%s.wav' -of '%s'";
 static char *FAADCMD=NULL;
+static char *FIXASS="fixass";
 #endif
 
 FILE *checkMP4(FILE *f,char *filename)
@@ -97,6 +100,7 @@ FILE *checkMP4(FILE *f,char *filename)
 	char readbuf[20];
 	char *cmdbuf;
 	FILE *pp;
+	char *tmpts;
 
 	memset(readbuf,0,sizeof(readbuf));
 	fread(readbuf,sizeof(readbuf),1,f);
@@ -105,8 +109,20 @@ FILE *checkMP4(FILE *f,char *filename)
 		return NULL;
 	}
 	// mp4ファイルだったら、ffmpegでwaveに変換し読み込む。
-	if (FAADCMD)
+	if (FAADCMD) {
+		// filename.tmp.ts is exist ?
+		asprintf(&tmpts,"%s.tmp.ts",filename);
+		if (basets && (pp=fopen(tmpts,"r") )) {
+			fclose(pp);
+			pp=NULL;
+		asprintf(&cmdbuf,"%s -d -w -F 0x3330D -q '%s'",FAADCMD,tmpts);
+		}
+		else {
 	    asprintf(&cmdbuf,"%s -d -w -q '%s'",FAADCMD,filename);
+}
+		
+		free(tmpts);
+	}
     else
 	    asprintf(&cmdbuf,"%s -v 0 -i '%s' -f wav pipe: 2>/dev/null",FFMPEGCMD,filename);
 
@@ -195,6 +211,9 @@ int cmpinfo(int mcnt)
 		asprintf(&cmdptr,"mv '%s-new.mp4' '%s'",wkfilename,wkfilename);
 		tclistpush2(cmdlist,cmdptr);
 		free(cmdptr);
+		asprintf(&cmdptr,"mv '%s.fix.ass' '%s.ass'",wkfilename,wkfilename);
+		tclistpush2(cmdlist,cmdptr);
+		free(cmdptr);
 	}
 	if (checkcomplete==2) { //CMカットファイル削除
 		asprintf(&cmdptr,"rm -f '%s-new.mp4'",wkfilename);
@@ -207,6 +226,10 @@ int cmpinfo(int mcnt)
 	free(cmdptr);
 
 	asprintf(&cmdptr,"rm -f '%s.split.log'",wkfilename);
+	tclistpush2(cmdlist,cmdptr);
+	free(cmdptr);
+
+	asprintf(&cmdptr,"rm -f '%s.fix.ass'",wkfilename);
 	tclistpush2(cmdlist,cmdptr);
 	free(cmdptr);
 
@@ -232,6 +255,7 @@ int dumpinfo(int mcnt)
 	char *cptr,*cptr2,*tfptr;
 	TCLIST *cmdlist;
 	TCLIST *tflist;
+	FILE *fp;
 
 	honstart=0;
 	hcnt=0;
@@ -351,6 +375,19 @@ int dumpinfo(int mcnt)
 			tclistpush2(cmdlist,cptr);
 		}
 
+		/* wkfilename.mp4.assファイルがあったらfixassを実施  */
+		asprintf(&cptr,"%s.ass",wkfilename);
+		fp = fopen(cptr,"r");
+		if (fp) {
+			free(cptr);
+			fclose(fp);
+			asprintf(&cptr,"%s '%s' > '%s.fix.ass'",FIXASS,wkfilename,wkfilename);
+			tclistpush2(cmdlist,cptr);
+			free(cptr);
+		}
+		else {
+			free(cptr);
+		}
 
 		for(i=0;i<tclistnum(tflist);i++) {
 			asprintf(&cptr,"rm -f '%s'",tclistval2(tflist,i));
@@ -623,10 +660,13 @@ int main(int argc, char *argv[])
 	ret = -1;
 
 	argv0 = argv[0];
-	while ((ch = getopt(argc, argv, "adtxb:m:v:c:")) != -1){
+	while ((ch = getopt(argc, argv, "agdtxb:m:v:c:")) != -1){
 		switch (ch){
 			case 'a':
 				noaudioencode=1;
+				break;
+			case 'g':
+				basets=1;
 				break;
 			case 'd':
 				verbose=1;

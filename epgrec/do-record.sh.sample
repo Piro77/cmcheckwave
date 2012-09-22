@@ -30,7 +30,7 @@ elif [ ${MODE} = 2 ]; then
    # CMカットmp4サンプル
    $RECORDER $CHANNEL $DURATION ${OUTPUT}.tmp.ts --b25 --strip >/dev/null &
    sleep 30
-   cat ${OUTPUT}.tmp.ts | nice -n 20 ffmpeg -i - -f mp4 -deinterlace -vcodec libx264 -vpre libx264-faster -r 30000/1001 -aspect 16:9 -s 768x432 -crf 28 -acodec copy  ${OUTPUT}
+   cat ${OUTPUT}.tmp.ts | nice -n 20 ffmpeg -i - -absf aac_adtstoasc -f mp4 -vcodec libx264 -aspect 16:9 -filter:v yadif,scale=1024:576 -crf 26 -acodec copy  ${OUTPUT}
    /usr/local/bin/cmcheckwave -t -x  ${OUTPUT} > ${OUTPUT}-sh
    if [ -f ${OUTPUT} -a -s ${OUTPUT} ]; then
    	rm -f ${OUTPUT}.tmp.ts

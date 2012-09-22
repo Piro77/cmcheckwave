@@ -16,8 +16,10 @@ $settings = Settings::factory();
 if( ! isset( $_GET['reserve_id'] )) jdialog("予約番号が指定されていません", "recordedTable.php");
 $reserve_id = $_GET['reserve_id'];
 $cmcheckext = $_GET['cmcheckext'];
+$fixass = ".ass";
 if ($cmcheckext) {
 	$cmcheckext="-new.mp4";
+	$fixass=".fix.ass";
 }
 
 
@@ -34,23 +36,43 @@ try{
 	$duration = $duration % 60;
 	$ds = $duration;
 	$pathex  = $rrec->path . $cmcheckext;
+	$assfile  = $rrec->path . $fixass;
+	$asschkfile = "./".$settings->spool."/".$rrec->path.$fixass;
 	
 	$title = htmlspecialchars(str_replace(array("\r\n","\r","\n"), '', $rrec->title),ENT_QUOTES);
 	$abstract = htmlspecialchars(str_replace(array("\r\n","\r","\n"), '', $rrec->description),ENT_QUOTES);
+
+	$location = $settings->install_url.$settings->spool."/".$pathex;
+	$asslocation = $settings->install_url.$settings->spool."/".$assfile;
 	
-	header("Content-type: video/x-ms-asf; charset=\"UTF-8\"");
-	header('Content-Disposition: inline; filename="'.$pathex.'.asx"');
-	echo "<ASX version = \"3.0\">";
-	echo "<PARAM NAME = \"Encoding\" VALUE = \"UTF-8\" />";
-	echo "<ENTRY>";
-	if( ! $rrec->complete ) echo "<REF HREF=\"".$settings->install_url."/sendstream.php?reserve_id=".$rrec->id ."\" />";
-	echo "<REF HREF=\"".$settings->install_url.$settings->spool."/".$pathex."\" />";
-	echo "<TITLE>".$title."</TITLE>";
-	echo "<ABSTRACT>".$abstract."</ABSTRACT>";
-	echo "<DURATION VALUE=";
-	echo '"'.sprintf( "%02d:%02d:%02d",$dh, $dm, $ds ).'" />';
-	echo "</ENTRY>";
-	echo "</ASX>";
+	header("Content-type: application/xspf+xml");
+	header('Content-Disposition: inline; filename="'.$pathex.'.xspf"');
+echo <<< EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<playlist version="1" xmlns="http://xspf.org/ns/0/" xmlns:vlc="http://www.videolan.org/vlc/playlist/ns/0/">
+	<title>playlist</title>
+	<trackList>
+		<track>
+			<title>$title</title>
+			<location>$location</location>
+			<duration>$duration</duration>
+EOF;
+if (file_exists($asschkfile)) {
+echo <<< EOF
+			<extension application="http://www.videolan.org/vlc/playlist/0">
+				<vlc:id>0</vlc:id>
+				<vlc:option>sub-file=$asslocation</vlc:option>
+			</extension>
+EOF;
+}
+echo <<< EOF
+		</track>
+	</trackList>
+	<extension application="http://www.videolan.org/vlc/playlist/0">
+			<vlc:item tid="0" />
+	</extension>
+</playlist>
+EOF;
 }
 catch(exception $e ) {
 	exit( $e->getMessage() );
