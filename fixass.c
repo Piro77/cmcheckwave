@@ -8,6 +8,8 @@ static double delay;
 typedef struct {
   double totalcut;
   double nextstart;
+  double cutstart; //カット開始位置
+  double cutend;   //カット終了位置
 }CUTTM;
 
 void usage(char *argv0)
@@ -30,6 +32,8 @@ char *getfixtimestr(double asstime,TCLIST *cutlist)
 
   for(i=0;i<tclistnum(cutlist);i++) {
     cuttm = tclistval2(cutlist,i);
+    //カット範囲の字幕は捨てる
+    if (asstime >= cuttm->cutstart && asstime <= cuttm->cutend) return NULL;
     if (asstime < cuttm->nextstart) break;
   }
   wktime = asstime - cuttm->totalcut;
@@ -41,7 +45,7 @@ char *getfixtimestr(double asstime,TCLIST *cutlist)
     asprintf(&fixedstr,"%d:%02d:0%.2f",h,m,wktime);
   else
     asprintf(&fixedstr,"%d:%02d:%.2f",h,m,wktime);
-//fprintf(stderr,"ass %.2f fixed %.2f\n",asstime,wktime);
+//fprintf(stderr,"ass %.2f fixed %.2f %s\n",asstime,wktime,fixedstr);
   return fixedstr;
 }
 char * fixtime(char *timestr,TCLIST *cutlist)
@@ -108,10 +112,10 @@ TCLIST *readlog(char *logfile)
   FILE *fp;
   TCLIST *cutlist;
   char rbuf[1024];
-  int  chkflg;
+  int  chkflg,listnum;
   char *p;
   double nextstart,totalcut,sttime,duration;
-  CUTTM cut;
+  CUTTM cut,*cuttm;
   
   
   cutlist = tclistnew();
@@ -135,6 +139,16 @@ TCLIST *readlog(char *logfile)
       if (p) {
         duration = strtod(p+strlen(" duration "),NULL); // 本編の時間
         chkflg=0;
+        listnum=tclistnum(cutlist);
+        if (listnum==0)  {
+        cut.cutstart=totalcut;
+        cut.cutend = sttime;
+           }
+        else {
+            cuttm = tclistval2(cutlist,listnum-1);
+            cut.cutstart=cuttm->nextstart;
+        cut.cutend = sttime;
+        }
 	totalcut = totalcut + (sttime - nextstart);
 	nextstart = sttime+duration;              //  カット開始位置+本編時間=次のカット開始時間
         /* asprintf(&p,"%.2f,%.2f",nextstart,totalcut); */
@@ -186,6 +200,11 @@ main(int argc,char *argv[])
         asprintf(&mp4boxsplitlog,"%s.split.log",argv[0]);
 
 	cutlist = readlog(mp4boxsplitlog);
+  for(i=0;i<tclistnum(cutlist);i++) {
+      CUTTM *cuttm;
+    cuttm = tclistval2(cutlist,i);
+ //   fprintf(stderr,"total %f next %f start %f end %f\n",cuttm->totalcut,cuttm->nextstart,cuttm->cutstart,cuttm->cutend);
+  }
 
         cutass(assfile,cutlist);
 
