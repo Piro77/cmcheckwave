@@ -59,6 +59,9 @@ typedef struct {
 	char cmflg;
 	char honpen;
 	int  peak;
+	int  stsecfix;
+	int  edsecfix;
+	char *fixparam;
 }muonst;
 
 static muonst m[1000];
@@ -263,26 +266,29 @@ int dumpinfo(int mcnt)
 	printf("#!/bin/sh\n# cmcheckwave %s\n#\n",wkfilename?wkfilename:"");
 	//カットするため、一連のCM,本編時間を結合
 	for(i=0;i<mcnt;i++) {
-		printf("# %.2f %.2f diff %.2f %s\n",m[i].stsec/1000.0,m[i].edsec/1000.0,m[i].diffs/1000.0,m[i].cmflg?"CM":"");
+		printf("# %.2f %.2f diff %.2f ",m[i].stsec/1000.0,m[i].edsec/1000.0,m[i].diffs/1000.0);
+		if (m[i].cmflg==1) printf("CM\n");
+		else printf("%s\n",m[i].fixparam?m[i].fixparam:"");
+
 		//本編開始位置をマーク
 		if ((m[i].cmflg==0)&&(honstart==0)) {
 			honstart=1;
 			if (i==0) h[hcnt].stsec = 0;
-			else h[hcnt].stsec = m[i-1].edsec+(defmuon*0.5);
+			else h[hcnt].stsec = m[i-1].edsec+(defmuon*0.5) + m[i].stsecfix;
 		}
 		else {
 			//終了位置をマーク
 			if ((m[i].cmflg==1)&&(honstart==1)) {
 				honstart=0;
 				//h[hcnt].edsec = m[i-1].stsec;
-				h[hcnt].edsec = checkMP4RAP(m[i-1].stsec,m[i-1].edsec);
+				h[hcnt].edsec = checkMP4RAP(m[i-1].stsec,m[i-1].edsec) + m[i-1].edsecfix;
 				totalsec += h[hcnt].edsec - h[hcnt].stsec;
 				hcnt++;
 			}
 		}
 	}
 	if (honstart==1) {
-		h[hcnt].edsec = checkMP4RAP(m[i-1].stsec,m[i-1].edsec);
+		h[hcnt].edsec = checkMP4RAP(m[i-1].stsec,m[i-1].edsec) + m[i-1].edsecfix;
 		totalsec += h[hcnt].edsec - h[hcnt].stsec;
 		hcnt++;
 	}
@@ -460,7 +466,26 @@ int rechecktext(FILE *f)
 			m[cnt].edsec = (int)(atof(wk2)*1000.0);
 			m[cnt].diffs = (int)(atof(wk3)*1000.0);
 			if (strstr(wk4,"CM")) m[cnt].cmflg=1;
-			else m[cnt].cmflg=0;
+			else {
+				m[cnt].cmflg=0;
+				/* CMカット位置の調整パラメータ
+					-0.1, (開始位置を-0.1秒ずらす、終了位置はそのまま)
+					,7    (開始位置そのまま、終了位置は7フレームずらす)
+					-0.5,10 (開始位置を-0.5秒、終了位置を10フレームずらす)
+					開始位置パラメータが有効なのはCMの直後
+					終了位置パラメータが有効なのは次がCMの場合のみとする。
+				*/
+				if (strlen(wk4)>0) {
+					m[cnt].fixparam = strdup(wk4);
+					TCLIST *t = tcstrsplit(wk4,",");
+					if (tclistnum(t)==2) {
+						m[cnt].edsecfix = atoi(tclistval2(t,1))*33;
+					}
+					if (tclistnum(t)>=1) {
+						m[cnt].stsecfix = (int)(atof(tclistval2(t,0))*1000.0);
+					}
+				}
+			}
 			m[cnt].honpen = 0;
 			cnt++;
 		}
@@ -527,6 +552,8 @@ int cmcheckwave(FILE *f)
 	}
 
 	readed=max=totalsec=kankaku=mcnt=0;
+	memset(m,sizeof(m),0);
+	memset(h,sizeof(h),0);
 	peak=0;
 	muonstartsec=-1;
 	loop=1;
@@ -709,6 +736,9 @@ int main(int argc, char *argv[])
 	if (tmpenv=getenv("AACENCPOT")) AACENCOPT=tmpenv;
 	if (tmpenv=getenv("MPLAYER")) MPLAYERCMD=tmpenv;
 	if (tmpenv=getenv("FAADCMD")) FAADCMD=tmpenv;
+#ifdef DEBUG
+	if ((FAADCMD) && (tmpenv=getenv("FORCEFFMPEGCMD"))) FAADCMD = NULL;
+#endif
 
 	ret=0;
 	p=NULL;

@@ -145,6 +145,16 @@ const char *tclistval2(const TCLIST *list, int index);
    All elements are removed. */
 void tclistclear(TCLIST *list);
 
+/* Create a list object by splitting a string.
+   `str' specifies the source string.
+   `delim' specifies a string containing delimiting characters.
+   The return value is a list object of the split elements.
+   If two delimiters are successive, it is assumed that an empty element is between the two.
+   Because the object of the return value is created with the function `tclistnew', it should be
+   deleted with the function `tclistdel' when it is no longer in use. */
+TCLIST *tcstrsplit(const char *str, const char *delims);
+
+
 
 #endif                                   /* duplication check */
 
