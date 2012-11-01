@@ -1,6 +1,9 @@
 PREFIX          = /usr/local
-TARGETS		= cmcheckwave
-OBJ_TARGETS	= cmcheckwave.o tclist.o
+TARGETS		= ${TARGET1} ${TARGET2}
+TARGET1		= cmcheckwave
+OBJ_TARGET1	= cmcheckwave.o tclist.o
+TARGET2		= fixass
+OBJ_TARGET2	= fixass.o tclist.o
 
 LANG=C
 CC		= gcc
@@ -14,10 +17,15 @@ LIBS		=
 all:		${TARGETS}
 
 
-${TARGETS}:	${OBJ_TARGETS}
-		${CC} ${CFLAGS} ${OBJ_TARGETS} -o $@ ${LDFLAGS} ${LIBS}
+${TARGET1}:	${OBJ_TARGET1}
+		${CC} ${CFLAGS} ${OBJ_TARGET1} -o $@ ${LDFLAGS} ${LIBS}
 
-${OBJ_TARGETS}:	${HEDDERDEPEND}
+${TARGET2}:	${OBJ_TARGET2}
+		${CC} ${CFLAGS} ${OBJ_TARGET2} -o $@ ${LDFLAGS} ${LIBS}
+
+${OBJ_TARGET1}:	${HEDDERDEPEND}
+
+${OBJ_TARGET2}:	${HEDDERDEPEND}
 
 clean:
 		rm -f core ${TARGETS} *.o
