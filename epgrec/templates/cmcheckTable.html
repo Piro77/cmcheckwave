@@ -10,6 +10,7 @@
 {literal}
 <script type="text/javascript" src="js/jquery-1.3.2.min.js"></script>
 <script type="text/javascript" src="js/jquery-ui-1.7.2.custom.min.js"></script>
+<script type="text/javascript" src="js/jquery.validate.min.js"></script>
 <link rel="stylesheet" href="start/jquery-ui-1.7.2.custom.css" type="text/css">
 
 <script type="text/javascript">
@@ -63,15 +64,22 @@
 		recut:function(mode){
 			var id_reserve_id = $('#id_reserve_id').val();
 			var tblstr="";
+			var fixstr="";
 			if (mode == 1) {
-				var elem = document.cmtbl.elements.length;
+				var elem = document.cmtbl.iscm.length;
 				for(i=0;i<elem;i++) {
 					if (tblstr!="")
 						tblstr=tblstr + ",";
-					if (document.cmtbl.elements[i].checked)
+					if (document.cmtbl.iscm[i].checked)
 						tblstr=tblstr + "1";
 					else
 						tblstr=tblstr + "0";
+				}
+				elem = document.cmtbl.cmfix.length;
+				for(i=0;i<elem;i++) {
+					if (i>0)
+						fixstr=fixstr + "|";
+				    fixstr=fixstr + document.cmtbl.cmfix[i].value;
 				}
 			}
 			var id_optvol = $('#id_optvol').val();
@@ -82,7 +90,7 @@
 			$('#floatBox4Dialog').dialog('close');
 			$('#floatBox4Dialog').html(str);
 			$('#floatBox4Dialog').dialog('open', 'center');
-			$.post('cmcheckExec.php', { reserve_id: id_reserve_id, checkval: tblstr ,optvol: id_optvol,optdif: id_optdif } , function( data ) {
+			$.post('cmcheckExec.php', { reserve_id: id_reserve_id, checkval: tblstr ,optvol: id_optvol,optdif: id_optdif, fixval: fixstr } , function( data ) {
 				if(data.match(/^error/i)){
 					$('#floatBox4Dialog').dialog('close');
 					alert(data);
@@ -206,26 +214,28 @@ table#reservation_table tr.prg_rec  {background-color: #F55;color:#FEE}
 </div>
 <BR>
 <div>
-	チェックボックスのチェック内容で再度分割します。<input type="submit" value="再分割実施" onClick="javascript:PRG.dialog('{$reserveid}','{$sitetitle}',1)"/>
+    チェックボックスのチェック内容で再度分割します。<input type="button" value="再分割実施" onClick="javascript:PRG.dialog('{$reserveid}','{$sitetitle}',1)"/>
 </div>
 <BR>
+<form name="cmtbl" id="cmtbl">
 <table id="cmcheck_table">
  <tr>
   <th>id</th>
   <th>開始位置</th>
   <th>間隔</th>
   <th>CM</th>
+  <th>fix</th>
   <th>サムネイル</th>
  </tr>
 
-{foreach from=$cmary item=keyword}
-<form name="cmtbl">
- <tr id="keyid_{$keyword.id}">
-  <td>{$keyword.id}</td>
-  <td>{$keyword.start}</td>
-  <td>{$keyword.diff}</td>
-  <td><input type="checkbox" id="iscm" name="iscm" value="1" {if $keyword.cm == CM } checked {/if}/>{$keyword.cm}</td>
-  <td><img width="128" height="72" src="{$keyword.thumb}"  onClick="javascript:PRG.imgdialog('{$keyword.id}','{$keyword.thumb}')""/></td>
+{foreach from=$cmary item=cm}
+ <tr id="keyid_{$cm.id}">
+  <td>{$cm.id}</td>
+  <td>{$cm.start}</td>
+  <td>{$cm.diff}</td>
+  <td><input type="checkbox" id="iscm" name="iscm" value="1" {if $cm.cm == CM } checked {/if}/>{$cm.cm}</td>
+  <td><input type="text" size="5" id="cmfix" name="cmfix" value="{$cm.fixparam}" {if $cm.cm == CM } style="display:none" {/if}/></td>
+  <td><img width="128" height="72" src="{$cm.thumb}"  onClick="javascript:PRG.imgdialog('{$cm.id}','{$cm.thumb}')""/></td>
  </tr>
 {/foreach}
 </table>

@@ -62,8 +62,13 @@ function __construct( $reserve_id = null ) {
 				$ary['startsv']=$itm[1];
                                 $ary['end']=$itm[2];
                                 $ary['diff']=$itm[4];
-                                $ary['cm']=trim($itm[5]);
-				$ary['thumb']=$settings->install_url.$settings->spool. "/".$this->rrec->path."-".$itmcnt.".png";
+                                if (trim($itm[5])=='CM') {
+                                    $ary['cm']=trim($itm[5]);
+                                }
+                                else {
+                                    $ary['fixparam']=trim($itm[5]);
+                                }
+				$ary['thumb']=$installurla['path'].$settings->spool. "/".$this->rrec->path."-".$itmcnt.".png";
                                 array_push($this->cmdata,$ary);
 				$itmcnt++;
 			}
@@ -92,9 +97,10 @@ function getfilename() {
 function getfileurl() {
 	return $this->fileurl;
 }
-function putdata($newcm)
+function putdata($newcm,$fixstr)
 {
 	$newary = explode(",",$newcm);
+	$fixary = explode("|",$fixstr);
 
 	if (count($this->cmdata)!=count($newary)) return(0);
 
@@ -108,8 +114,9 @@ function putdata($newcm)
 	foreach($this->cmdata as $data) {
 		if ($newary[$cnt]=="1")
 			$cmval = "CM";
-		else
-			$cmval = "";
+		else {
+			$cmval = $fixary[$cnt];
+		}
 		fprintf($fp,"# %s %s diff %s %s\n",
 			$data['startsv'],$data['end'],$data['diff'],$cmval);
 		$cnt++;

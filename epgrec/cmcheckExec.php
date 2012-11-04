@@ -13,6 +13,7 @@ $reserve_id = $_POST['reserve_id'];
 $cmcheckcomplete = $_POST['cmcheckcomplete'];
 $replace = $_POST['replace'];
 $newcmcheckval = $_POST['checkval'];
+$newcmfixval = $_POST['fixval'];
 $cmdvol = $_POST['optvol'];
 $cmddif = $_POST['optdif'];
 
@@ -36,7 +37,7 @@ try{
 			if (!$cm->getbasefile()) {
 				exit( "Error:"."ファイルがありません");
 			}
-			if ($cm->putdata($newcmcheckval)==1) {
+			if ($cm->putdata($newcmcheckval,$newcmfixval)==1) {
 				$cmdbuf=sprintf("/usr/local/bin/cmcheckwave -t -x %s\n",escapeshellarg($cm->getfilename()));
 				system($cmdbuf);
 			}
