@@ -88,12 +88,12 @@ static char *AACENCOPT="%s '%s.wav' '%s' 60";
 static char *FAADCMD="/usr/local/bin/faad";
 static char *FIXASS="/usr/home/piro/bin/fixass";
 #else
-static char *MP4BOXCMD="mp4box";
+static char *MP4BOXCMD="MP4Box";
 static char *SOXCMD="sox";
 static char *FFMPEGCMD="ffmpeg";
 static char *MPLAYERCMD="mplayer";
 static char *AACENCCMD="neroAacEnc";
-static char *AACENCOPT="%s -hev2 -br 60 -if '%s.wav' -of '%s'";
+static char *AACENCOPT="%s -br 60 -if '%s.wav' -of '%s'";
 static char *FAADCMD=NULL;
 static char *FIXASS="fixass";
 #endif
