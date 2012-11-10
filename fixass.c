@@ -112,7 +112,7 @@ TCLIST *readlog(char *logfile)
   FILE *fp;
   TCLIST *cutlist;
   char rbuf[1024];
-  int  chkflg,listnum;
+  int  chkflg,listnum,lcnt;
   char *p;
   double nextstart,totalcut,sttime,duration;
   CUTTM cut,*cuttm;
@@ -121,15 +121,21 @@ TCLIST *readlog(char *logfile)
   cutlist = tclistnew();
   fp = fopen(logfile,"r");
   if (fp == NULL) return cutlist;
-  chkflg=0;
+  chkflg=lcnt=0;
   nextstart=totalcut=0;
   while(fgets(rbuf,1024,fp)!=NULL) {
+    if (lcnt==0) {
+      // chk start 0 sec
+      p=strstr(rbuf," duration ");
+      if (p) chkflg=1;
+    }
     if (!chkflg) {
       // find Adjust Start pos
       p = strstr(rbuf,"previous random access at ");
       if (p) {
         sttime = strtod(p+strlen("previous random access at "),NULL);
         chkflg=1;
+        lcnt++;
         continue;
       }
     }
@@ -155,6 +161,7 @@ TCLIST *readlog(char *logfile)
         cut.totalcut = totalcut;
         cut.nextstart = nextstart;
 	tclistpush(cutlist,&cut,sizeof(CUTTM));
+        lcnt++;
         continue;
       }
     }
