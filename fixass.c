@@ -30,13 +30,16 @@ char *getfixtimestr(double asstime,TCLIST *cutlist)
   int h,m;
   char *fixedstr;
 
+  cuttm = NULL;
   for(i=0;i<tclistnum(cutlist);i++) {
     cuttm = tclistval2(cutlist,i);
     //ƒJƒbƒg”ÍˆÍ‚ÌŽš–‹‚ÍŽÌ‚Ä‚é
     if (asstime >= cuttm->cutstart && asstime <= cuttm->cutend) return NULL;
     if (asstime < cuttm->nextstart) break;
   }
-  wktime = asstime - cuttm->totalcut;
+  if (cuttm) wktime = asstime - cuttm->totalcut;
+  else wktime = asstime;
+
   if (wktime<0) return NULL;
   h = wktime / 3600;
   m = (wktime - h*3600) / 60;
@@ -122,12 +125,12 @@ TCLIST *readlog(char *logfile)
   fp = fopen(logfile,"r");
   if (fp == NULL) return cutlist;
   chkflg=lcnt=0;
-  nextstart=totalcut=0;
+  nextstart=totalcut=0.0;
   while(fgets(rbuf,1024,fp)!=NULL) {
     if (lcnt==0) {
       // chk start 0 sec
       p=strstr(rbuf," duration ");
-      if (p) chkflg=1;
+      if (p) {chkflg=1;sttime=0.0;}
     }
     if (!chkflg) {
       // find Adjust Start pos
@@ -210,7 +213,7 @@ main(int argc,char *argv[])
   for(i=0;i<tclistnum(cutlist);i++) {
       CUTTM *cuttm;
     cuttm = tclistval2(cutlist,i);
- //   fprintf(stderr,"total %f next %f start %f end %f\n",cuttm->totalcut,cuttm->nextstart,cuttm->cutstart,cuttm->cutend);
+    //fprintf(stderr,"%d total %f next %f start %f end %f\n",i,cuttm->totalcut,cuttm->nextstart,cuttm->cutstart,cuttm->cutend);
   }
 
         cutass(assfile,cutlist);
