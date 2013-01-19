@@ -17,6 +17,11 @@ $newcmfixval = $_POST['fixval'];
 $cmdvol = $_POST['optvol'];
 $cmddif = $_POST['optdif'];
 
+$optaudio="";
+if ($_POST['optaudio']=='true') {
+    $optaudio="-a";
+}
+
 
 try{
 	        $cm = new Cmcheck( $reserve_id );
@@ -28,7 +33,7 @@ try{
 			else
 			 	$replace = 1;
 			
-			$cmdbuf=sprintf("/usr/local/bin/cmcheckwave -t -c %d -x %s\n",$replace,escapeshellarg($cm->getfilename()));
+			$cmdbuf=sprintf("/usr/local/bin/cmcheckwave %s -t -c %d -x %s\n",$optaudio,$replace,escapeshellarg($cm->getfilename()));
 			system($cmdbuf);
 		}
 
@@ -38,15 +43,15 @@ try{
 				exit( "Error:"."ファイルがありません");
 			}
 			if ($cm->putdata($newcmcheckval,$newcmfixval)==1) {
-				$cmdbuf=sprintf("/usr/local/bin/cmcheckwave -t -x %s\n",escapeshellarg($cm->getfilename()));
+				$cmdbuf=sprintf("/usr/local/bin/cmcheckwave %s -t -x %s\n",$optaudio,escapeshellarg($cm->getfilename()));
 				system($cmdbuf);
 			}
 			else
 				exit("Error:putdatafailed");
 		}
 		if (($cmdvol>0) && ($cmddif>0)) {
-				$cmdbuf=sprintf("/usr/local/bin/cmcheckwave -v %s -m %s -t -x %s > %s\n",escapeshellarg($cmdvol),escapeshellarg($cmddif),escapeshellarg($cm->getrecfilename()),escapeshellarg($cm->getfilename()));
-				var_dump($cmdbuf);
+				$cmdbuf=sprintf("/usr/local/bin/cmcheckwave %s -v %s -m %s -t -x %s > %s\n",$optaudio,escapeshellarg($cmdvol),escapeshellarg($cmddif),escapeshellarg($cm->getrecfilename()),escapeshellarg($cm->getfilename()));
+				//var_dump($cmdbuf);
 				system($cmdbuf);
 		}
 

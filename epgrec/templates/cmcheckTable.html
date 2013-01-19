@@ -34,6 +34,7 @@
 			str += '<input type="hidden" name="cmcheckval" id="id_cmcheckval" value=0 />';
 			str += '<input type="hidden" name="optvol" id="id_optvol" value=0 />';
 			str += '<input type="hidden" name="optdif" id="id_optdif" value=0 />';
+			str += '<BR>オーディオの再エンコードを実施しない。<input type="checkbox" id="id_optaudio" name="optaudio" value="1"><BR>';
 			str += '<div style="margin:2em 0 1em 0;text-align:center;"><a href="javascript:PRG.recut(1)" class="ui-state-default ui-corner-all ui-dialog-buttonpane button">CMチェックボックスの内容で再度分割を実施</a></div>';
 			}
 			else {
@@ -53,7 +54,8 @@
 				str += ' <option value="200">200</option>';
 				str += ' <option value="250" selected>250</option>';
 				str += ' <option value="300">300</option>';
-				str += '</select>ms<BR><BR>';
+				str += '</select>ms<BR>';
+				str += 'オーディオの再エンコードを実施しない。<input type="checkbox" id="id_optaudio" name="optaudio" value="1"><BR><BR>';
 				str += '本編にCMが含まれてしまっている場合などに再指定し分割します<BR>';
 				str += 'ボリュームを+するか間隔を短くすることで正常に検知されるようになると思われます。<BR>';
 			str += '<div style="margin:2em 0 1em 0;text-align:center;"><a href="javascript:PRG.recut(2)" class="ui-state-default ui-corner-all ui-dialog-buttonpane button">指定パラメータで元ファイルから再分割します。</a></div>';
@@ -79,18 +81,19 @@
 				for(i=0;i<elem;i++) {
 					if (i>0)
 						fixstr=fixstr + "|";
-				    fixstr=fixstr + document.cmtbl.cmfix[i].value;
+					fixstr=fixstr + document.cmtbl.cmfix[i].value;
 				}
 			}
 			var id_optvol = $('#id_optvol').val();
 			var id_optdif = $('#id_optdif').val();
+			var id_optaudio = $('#id_optaudio').is(':checked');
 			var str;
 			str  = '<div class="prg_title">再分割中・・・・</div>';
 			str += '<div>しばらくお待ちください。(完了後自動でクローズします。)</div>';
 			$('#floatBox4Dialog').dialog('close');
 			$('#floatBox4Dialog').html(str);
 			$('#floatBox4Dialog').dialog('open', 'center');
-			$.post('cmcheckExec.php', { reserve_id: id_reserve_id, checkval: tblstr ,optvol: id_optvol,optdif: id_optdif, fixval: fixstr } , function( data ) {
+			$.post('cmcheckExec.php', { reserve_id: id_reserve_id, checkval: tblstr ,optvol: id_optvol,optdif: id_optdif, fixval: fixstr,optaudio: id_optaudio } , function( data ) {
 				if(data.match(/^error/i)){
 					$('#floatBox4Dialog').dialog('close');
 					alert(data);
