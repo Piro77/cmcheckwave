@@ -154,7 +154,7 @@ int checkMP4RAP(int stsec,int edsec)
 
 	if (wkfilename==NULL) return stsec;
 
-	sprintf(cmdbuf,"%s -quiet -noprog -splitx %.2f:%.2f '%s' -out /dev/null",MP4BOXCMD,edsec/1000.0,(edsec+10000)/1000.0,wkfilename);
+	sprintf(cmdbuf,"%s -quiet -noprog -splitx %.2f:%.2f '%s' -out /dev/null 2>&1",MP4BOXCMD,edsec/1000.0,(edsec+10000)/1000.0,wkfilename);
 
 	rap=0.0;
 	pp = popen(cmdbuf,"r");
@@ -305,7 +305,7 @@ int dumpinfo(int mcnt)
 	for(i=0;i<hcnt;i++) {
 		if (wkfilename) {
 			asprintf(&tfptr,"%s.%d%s",wkfilename,i,noaudioencode?".mp4":"");
-			asprintf(&cptr,"%s -quiet -noprog -splitx %.2f:%.2f '%s' -out '%s' >> '%s.split.log'",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0,wkfilename,tfptr,wkfilename);
+			asprintf(&cptr,"%s -quiet -noprog -splitx %.2f:%.2f '%s' -out '%s' >> '%s.split.log' 2>&1",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0,wkfilename,tfptr,wkfilename);
 			tclistpush2(cmdlist,cptr);
 			tclistpush2(tflist,tfptr);
 			free(tfptr);
