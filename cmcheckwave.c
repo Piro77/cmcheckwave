@@ -304,32 +304,12 @@ int dumpinfo(int mcnt)
 	}
 	for(i=0;i<hcnt;i++) {
 		if (wkfilename) {
-			asprintf(&tfptr,"%s.%d%s",wkfilename,i,noaudioencode?".mp4":"");
+			asprintf(&tfptr,"%s.%d%s",wkfilename,i,".mp4");
 			asprintf(&cptr,"%s -quiet -noprog -splitx %.2f:%.2f '%s' -out '%s' >> '%s.split.log' 2>&1",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0,wkfilename,tfptr,wkfilename);
 			tclistpush2(cmdlist,cptr);
 			tclistpush2(tflist,tfptr);
 			free(tfptr);
 			free(cptr);
-
-			if (!noaudioencode) {
-				asprintf(&tfptr,"%s.%d.wav",wkfilename,i);
-
-				if (FAADCMD)
-					asprintf(&cptr,"%s -d -q -o '%s' '%s.%d' ",FAADCMD,tfptr,wkfilename,i);
-				else
-					asprintf(&cptr,"%s -v 0 -i '%s.%d' -vn '%s'",FFMPEGCMD,wkfilename,i,tfptr);
-				tclistpush2(cmdlist,cptr);
-				tclistpush2(tflist,tfptr);
-				free(tfptr);
-				free(cptr);
-
-				asprintf(&tfptr,"%s.%d.mp4",wkfilename,i);
-				asprintf(&cptr,"%s -v 0 -i '%s.%d' -an -vcodec copy '%s'",FFMPEGCMD,wkfilename,i,tfptr);
-				tclistpush2(cmdlist,cptr);
-				tclistpush2(tflist,tfptr);
-				free(tfptr);
-				free(cptr);
-			}
 		}
 		else {
 			asprintf(&cptr,"# %s -quiet -noprog -splitx %.2f:%.2f ",MP4BOXCMD,h[i].stsec/1000.0,h[i].edsec/1000.0);
@@ -337,16 +317,49 @@ int dumpinfo(int mcnt)
 		}
 	}
 	if (wkfilename) {
-		if (!noaudioencode) {
-			asprintf(&cptr2,"%s --norm ",SOXCMD);
-			for(i=0;i<hcnt;i++) {
-				asprintf(&tfptr,"%s.%d.wav",wkfilename,i);
-				asprintf(&cptr,"%s '%s' ",cptr2,tfptr);
-				free(cptr2);
-				cptr2=cptr;
-				tclistpush2(tflist,tfptr);
-				free(tfptr);
-			}
+		//ファイル名-new.mp4ファイルを削除する
+		asprintf(&cptr,"rm -f '%s-new.mp4'",wkfilename);
+		tclistpush2(cmdlist,cptr);
+		free(cptr);
+
+		asprintf(&cptr2,"%s -quiet -noprog ",MP4BOXCMD);
+		for(i=0;i<hcnt;i++) {
+			asprintf(&cptr,"%s -cat '%s.%d.mp4' ",cptr2,wkfilename,i);
+			free(cptr2);
+			cptr2=cptr;
+		}
+		if (noaudioencode) {
+			asprintf(&cptr,"%s '%s-new.mp4'",cptr2,wkfilename);
+			tclistpush2(cmdlist,cptr);
+			free(cptr);
+		}
+		else {
+			asprintf(&tfptr,"%s.%d.mp4",wkfilename,i);
+			asprintf(&cptr,"%s '%s'",cptr2,tfptr);
+			tclistpush2(cmdlist,cptr);
+			tclistpush2(tflist,tfptr);
+			free(cptr);
+			free(tfptr);
+
+			asprintf(&tfptr,"%s.%d.wav",wkfilename,i);
+
+			if (FAADCMD)
+				asprintf(&cptr,"%s -d -q -o '%s' '%s.%d.mp4' ",FAADCMD,tfptr,wkfilename,i);
+			else
+				asprintf(&cptr,"%s -v 0 -i '%s.%d.mp4' -vn '%s'",FFMPEGCMD,wkfilename,i,tfptr);
+			tclistpush2(cmdlist,cptr);
+			tclistpush2(tflist,tfptr);
+			free(tfptr);
+			free(cptr);
+
+			asprintf(&tfptr,"%s.%d.mp4",wkfilename,i);
+			asprintf(&cptr,"%s -v 0 -i '%s.%d.mp4' -an -vcodec copy '%s-new.mp4'",FFMPEGCMD,wkfilename,i,wkfilename);
+			tclistpush2(cmdlist,cptr);
+			tclistpush2(tflist,tfptr);
+			free(tfptr);
+			free(cptr);
+
+			asprintf(&cptr2,"%s --norm '%s.%d.wav'",SOXCMD,wkfilename,i);
 			asprintf(&tfptr,"%s.wav",wkfilename);
 			asprintf(&cptr,"%s '%s'",cptr2,tfptr);
 			free(cptr2);
@@ -360,23 +373,7 @@ int dumpinfo(int mcnt)
 			free(cptr);
 			tclistpush2(tflist,tfptr);
 			free(tfptr);
-		}
-		//ファイル名-new.mp4ファイルを削除する
-		asprintf(&cptr,"rm -f '%s-new.mp4'",wkfilename);
-		tclistpush2(cmdlist,cptr);
-		free(cptr);
 
-		asprintf(&cptr2,"%s -quiet -noprog ",MP4BOXCMD);
-		for(i=0;i<hcnt;i++) {
-			asprintf(&cptr,"%s -cat '%s.%d.mp4' ",cptr2,wkfilename,i);
-			free(cptr2);
-			cptr2=cptr;
-		}
-		asprintf(&cptr,"%s '%s-new.mp4'",cptr2,wkfilename);
-		tclistpush2(cmdlist,cptr);
-		free(cptr);
-
-		if (!noaudioencode) {
 			asprintf(&cptr,"%s -quiet -noprog -add '%s.aac' '%s-new.mp4'",MP4BOXCMD,wkfilename,wkfilename);
 			tclistpush2(cmdlist,cptr);
 		}
