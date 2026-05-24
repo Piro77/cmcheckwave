@@ -6,7 +6,7 @@ TARGET2		= fixass
 OBJ_TARGET2	= fixass.o tclist.o
 
 LANG=C
-CC		= gcc
+CC		= clang
 CFLAGS		= -g
 LDFLAGS		=
 LIBS		=
