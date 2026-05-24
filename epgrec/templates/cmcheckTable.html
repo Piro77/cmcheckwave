@@ -243,7 +243,7 @@ table#reservation_table tr.prg_rec  {background-color: #F55;color:#FEE}
   <td>{$cm.id}</td>
   <td>{$cm.start}</td>
   <td>{$cm.diff}</td>
-  <td><input type="checkbox" id="iscm" name="iscm" class="cmcheckbox" value="1" {if $cm.cm == 'CM' } checked {/if}/>{$cm.cm}</td>
+	<td><input type="checkbox" id="iscm{$cm.id}" name="iscm" class="cmcheckbox" value="1" {if $cm.cm == 'CM' } checked {/if}/>{$cm.cm} <label for='iscm{$cm.id}'>　</label></td>
   <td><input type="text" size="5" id="cmfix" name="cmfix" value="{$cm.fixparam}" {if $cm.cm == 'CM' } style="display:none" {/if}/></td>
   <td><img width="128" height="72" src="{$cm.thumb}"  onClick="javascript:PRG.imgdialog('{$cm.id}','{$cm.thumb}')"/></td>
  </tr>
