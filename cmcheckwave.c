@@ -25,7 +25,7 @@ static void usage(char *cmd){
 	fprintf(stderr,"%s: -S filename.mp4\n\n",cmd);
 	fprintf(stderr,"Check CM and manual edit\n");
 	fprintf(stderr,"%s: -b filename.mp4 filename.mp4 > filename-sh\n",cmd);
-	fprintf(stderr,"Edit filename-sh for mis detection and re execute next cmd\n",cmd);
+	fprintf(stderr,"Edit filename-sh for mis detection and re execute next cmd\n");
 	fprintf(stderr,"%s: -x filename-sh\n",cmd);
 	exit(1);
 }
@@ -34,7 +34,7 @@ unsigned char *get_bytes(FILE *f, int n)
 {
 	static unsigned char s[16];
 
-	assert (n <= sizeof s);
+	assert (n <= (int)sizeof s);
 	if (fread(s, n, 1, f) != 1) {
 		fprintf(stderr, "Read error\n");
 		exit(1);
@@ -272,15 +272,6 @@ FILE *checkMP4(FILE *f,char *filename)
 	return pp;
 }
 
-FILE *openpipeffmpeg(char *filename)
-{
-	char cmdbuf[1024];
-	FILE *pp;
-
-
-
-}
-
 int checkMP4RAP(int stsec,int edsec)
 {
 	FILE *pp;
@@ -386,6 +377,7 @@ int cmpinfo(int mcnt)
 			printf("%s\n",tclistval2(cmdlist,i));
 	}
 
+	return 0;
 }
 int dumpinfo(int mcnt)
 {
@@ -568,26 +560,23 @@ int dumpinfo(int mcnt)
 			printf("%s\n",tclistval2(cmdlist,i));
 	}
 
+	return 0;
 }
 
 int rechecktext(FILE *f)
 {
 	char rbuf[1024];
-	char fname[1024];
-	char cm[100];
 	char wk1[100];
 	char wk2[100];
 	char wk3[100];
 	char wk4[100];
-	int cnt,pgst,len;
-	float in1,in2,in3;
+	int cnt,pgst;
 
 
 	rewind(f);
 	cnt=0;
 
 	pgst=0;
-	fname[0]=0x00;
 
 	while(fgets(rbuf,1024,f)!=NULL){
 		if (strstr(rbuf,"# cmcheckwave ")) {
@@ -647,15 +636,12 @@ int cmcheckwave(FILE *f)
 {
 	int i,j, x, channels, bits;
 	unsigned long len;
-	long count;
 	unsigned char s[5];
 	unsigned long bsec;
-	int readed,loop,max,totalsec,muonstartsec,kankaku;
-	double dul,diffs;
-	char cm[10];
-	int mcnt,hcnt,rcnt,readbufsz;
+	int readed,max,totalsec,muonstartsec,kankaku;
+	double diffs;
+	int mcnt,rcnt,readbufsz;
 	unsigned char *readbuf;
-	int honstart;
 	int cmwork;
 	int peak;
 
@@ -683,35 +669,34 @@ int cmcheckwave(FILE *f)
 	get_ushort(f);
 	bits = get_ushort(f);
 	//fprintf(stderr, "  Bits / sample = %u\n", bits);
-	for (i = 16; i < len; i++)
+	for (i = 16; (unsigned long)i < len; i++)
 		fgetc(f);
 	while (fread(s, 4, 1, f) == 1) {
 		len = get_ulong(f);
 		s[4] = 0;
 		//fprintf(stderr, "[%s] (%lu bytes)\n", s, len);
 		if (memcmp(s, "data", 4) == 0) break;
-		for (i = 0; i < len; i++)
+		for (i = 0; (unsigned long)i < len; i++)
 			fgetc(f);
 	}
 
 	readed=max=totalsec=kankaku=mcnt=0;
-	memset(m,sizeof(m),0);
-	memset(h,sizeof(h),0);
+	memset(m,0,sizeof(m));
+	memset(h,0,sizeof(h));
 	peak=0;
 	muonstartsec=-1;
-	loop=1;
 	readbuf=malloc(4096*1000);
-	while(rcnt=fread(readbuf,1,4096*1000,f)) {
+	while((rcnt=fread(readbuf,1,4096*1000,f))) {
 		for(readbufsz=0;readbufsz<rcnt;) {
 			for (i = 0; i < channels; i++) {
 				if (bits <= 8) {
-					//if ((x = fgetc(f)) == EOF) {loop=0;break;}
+					//if ((x = fgetc(f)) == EOF) {break;}
 					x = readbuf[readbufsz];
 					readed++;
 					readbufsz++;
 					x -= 128;
 				} else {
-					//if (fread(s, 2, 1, f) != 1) {loop=0;break;}
+					//if (fread(s, 2, 1, f) != 1) {break;}
 					//x = (short)(s[0] + 256 * s[1]);
 					x = (short)(readbuf[readbufsz+0] + 256 * readbuf[readbufsz+1]);
 					readed+=2;
@@ -740,7 +725,6 @@ int cmcheckwave(FILE *f)
 							m[mcnt].cmflg = 0;
 							m[mcnt].honpen = 0;
 
-							dul = (totalsec-muonstartsec)/1000.0;
 							diffs = (totalsec-kankaku)/1000.0;
 
 							if ((diffs >  14.5) && (diffs < 15.5)) m[mcnt].cmflg=1;
@@ -822,8 +806,8 @@ int cmcheckwave(FILE *f)
 int main(int argc, char *argv[])
 {
 	extern char *optarg;
-	extern int optind, opterr;
-	int i,ch;
+	extern int optind;
+	int ch;
 	FILE *f,*p;
 	int ret;
 	char *tmpenv,*argv0;
@@ -862,7 +846,7 @@ int main(int argc, char *argv[])
 				break;
 			case 'c':
 				checkcomplete=atoi(optarg);
-				if (checkcomplete <= 0 && checkcomplete > 2) usage(argv0);
+				if (checkcomplete <= 0 || checkcomplete > 2) usage(argv0);
 				break;
 			default:
 				usage(argv0);
@@ -875,15 +859,15 @@ int main(int argc, char *argv[])
 		usage(argv0);
 		return 0;
 	}
-	if (tmpenv=getenv("FFMPEG")) FFMPEGCMD=tmpenv;
-	if (tmpenv=getenv("FFPROBE")) FFPROBECMD=tmpenv;
-	if (tmpenv=getenv("SOX")) SOXCMD=tmpenv;
-	if (tmpenv=getenv("MP4BOX")) MP4BOXCMD=tmpenv;
-	if (tmpenv=getenv("MP4BOXCMDRAPSTR")) MP4BOXCMDRAPSTR=tmpenv;
-	if (tmpenv=getenv("AACENC")) AACENCCMD=tmpenv;
-	if (tmpenv=getenv("AACENCPOT")) AACENCOPT=tmpenv;
-	if (tmpenv=getenv("MPLAYER")) MPLAYERCMD=tmpenv;
-	if (tmpenv=getenv("FAADCMD")) FAADCMD=tmpenv;
+	if ((tmpenv=getenv("FFMPEG"))) FFMPEGCMD=tmpenv;
+	if ((tmpenv=getenv("FFPROBE"))) FFPROBECMD=tmpenv;
+	if ((tmpenv=getenv("SOX"))) SOXCMD=tmpenv;
+	if ((tmpenv=getenv("MP4BOX"))) MP4BOXCMD=tmpenv;
+	if ((tmpenv=getenv("MP4BOXCMDRAPSTR"))) MP4BOXCMDRAPSTR=tmpenv;
+	if ((tmpenv=getenv("AACENC"))) AACENCCMD=tmpenv;
+	if ((tmpenv=getenv("AACENCPOT"))) AACENCOPT=tmpenv;
+	if ((tmpenv=getenv("MPLAYER"))) MPLAYERCMD=tmpenv;
+	if ((tmpenv=getenv("FAADCMD"))) FAADCMD=tmpenv;
 #ifdef DEBUG
 	if ((FAADCMD) && (tmpenv=getenv("FORCEFFMPEGCMD"))) FAADCMD = NULL;
 #endif

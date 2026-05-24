@@ -1,5 +1,7 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "tclist.h"
 
@@ -19,7 +21,7 @@ void usage(char *argv0)
   printf("	Read AssFile from filename.mp4.ass\n");
   printf("	OutputFixed ASS to stdout\n");
   printf("	option -d delay(delay sec)\n\n");
-  exit;
+  exit(1);
 }
 
 char *getfixtimestr(double asstime,TCLIST *cutlist)
@@ -32,7 +34,8 @@ char *getfixtimestr(double asstime,TCLIST *cutlist)
 
   cuttm = NULL;
   for(i=0;i<tclistnum(cutlist);i++) {
-    cuttm = tclistval2(cutlist,i);
+    int sp;
+    cuttm = (CUTTM *)tclistval(cutlist,i,&sp);
     //ƒJƒbƒg”ÍˆÍ‚ÌŽš–‹‚ÍŽÌ‚Ä‚é
     if (asstime >= cuttm->cutstart && asstime <= cuttm->cutend) return NULL;
     if (asstime < cuttm->nextstart) break;
@@ -73,7 +76,8 @@ void cutass(char *assfile,TCLIST *cutlist)
 {
   
   FILE *fp;
-  char rbuf[2048],*p;
+  char rbuf[2048];
+  const char *p;
   TCLIST *splist;
   int i,skip;
 
@@ -88,7 +92,7 @@ void cutass(char *assfile,TCLIST *cutlist)
         for(i=1;i<tclistnum(splist)-1;i++) {
            p = tclistval2(splist,i);
            if ( i==1 ) {
-		     p = fixtime(p,cutlist);
+		     p = fixtime((char *)p,cutlist);
              if (p == NULL) { /* */
                  skip = 1;
                  break;
@@ -97,7 +101,7 @@ void cutass(char *assfile,TCLIST *cutlist)
                  printf("%s,",tclistval2(splist,0));
              }
            }
-           if (i==2) p = fixtime(p,cutlist);
+           if (i==2) p = fixtime((char *)p,cutlist);
            printf("%s,",p);
         }
         if (skip == 0) printf("%s",tclistval2(splist,i));
@@ -154,7 +158,8 @@ TCLIST *readlog(char *logfile)
         cut.cutend = sttime;
            }
         else {
-            cuttm = tclistval2(cutlist,listnum-1);
+            int sp;
+            cuttm = (CUTTM *)tclistval(cutlist,listnum-1,&sp);
             cut.cutstart=cuttm->nextstart;
         cut.cutend = sttime;
         }
@@ -172,15 +177,12 @@ TCLIST *readlog(char *logfile)
   fclose(fp);
   return cutlist;
 }
-main(int argc,char *argv[])
+int main(int argc,char *argv[])
 {
         extern char *optarg;
-        extern int optind, opterr;
-        int i,ch;
-        FILE *f,*p;
-        int ret;
-        char *tmpenv,*argv0;
-        ret = -1;
+        extern int optind;
+        int ch;
+        char *argv0;
         char *assfile,*mp4boxsplitlog;
 	TCLIST *cutlist;
 
@@ -210,12 +212,6 @@ main(int argc,char *argv[])
         asprintf(&mp4boxsplitlog,"%s.split.log",argv[0]);
 
 	cutlist = readlog(mp4boxsplitlog);
-  for(i=0;i<tclistnum(cutlist);i++) {
-      CUTTM *cuttm;
-    cuttm = tclistval2(cutlist,i);
-    //fprintf(stderr,"%d total %f next %f start %f end %f\n",i,cuttm->totalcut,cuttm->nextstart,cuttm->cutstart,cuttm->cutend);
-  }
-
         cutass(assfile,cutlist);
 
 	exit(0);
