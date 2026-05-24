@@ -46,8 +46,7 @@ target_audio_start = output_video_start + original_offset
 target_delay_ms = round(target_audio_start * 1000)
 ```
 
-If `target_delay_ms` is non-negative and differs from the current output audio
-start, it runs:
+If `target_delay_ms` differs from the current output audio start, it runs:
 
 ```sh
 MP4Box -quiet -noprog -delay <audioTrackID>=<target_delay_ms> filename.mp4-new.mp4
@@ -60,6 +59,10 @@ track is added.
 
 The metadata-based method only corrects differences visible through stream
 `start_time`. It will not detect all real lip-sync problems.
+
+Negative delay was later verified with the `GR32_20260522_2300.mp4` sample:
+`MP4Box -delay 2=-533` produced the same audio packet timing as the provided
+`GR32_20260522_2300.mp4-new-fixed.mp4` reference.
 
 Known weak cases:
 
@@ -116,7 +119,6 @@ Then, after enough test files confirm reliability, `-S` could optionally run
 metadata correction first and fall back to waveform correction when metadata
 does not explain the observed drift.
 
-For negative corrections, the current metadata implementation reports an error
-instead of attempting to shift audio earlier. A waveform implementation should
-decide explicitly whether to support negative offsets by trimming audio, shifting
-video, or remuxing with ffmpeg.
+Negative corrections are handled with MP4Box negative delay. A waveform
+implementation should still keep explicit limits so a bad correlation does not
+apply a large unintended shift.

@@ -211,11 +211,6 @@ static int sync_adjust_mp4(char *filename)
 	    "sync adjust: original av offset %.3f sec, output av offset %.3f sec, target audio start %.3f sec\n",
 	    org_offset,new_offset,target_audio_start);
 
-	if (target_delay_ms < 0) {
-		fprintf(stderr,"sync adjust: negative target audio delay is not supported: %d ms\n",target_delay_ms);
-		free(newfilename);
-		return 1;
-	}
 	if (target_delay_ms == current_delay_ms) {
 		fprintf(stderr,"sync adjust: audio delay already matches target: %d ms\n",target_delay_ms);
 		free(newfilename);
