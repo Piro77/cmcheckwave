@@ -21,6 +21,8 @@ static void usage(char *cmd){
 	fprintf(stderr,"%s: filename.mp4\n\n",cmd);
 	fprintf(stderr,"Check CM from mp4file and execute cutcmd(create new filename.mp4-new.mp4) \n");
 	fprintf(stderr,"%s: -x filename.mp4\n\n",cmd);
+	fprintf(stderr,"Adjust audio track delay of filename.mp4-new.mp4 from stream metadata\n");
+	fprintf(stderr,"%s: -S filename.mp4\n\n",cmd);
 	fprintf(stderr,"Check CM and manual edit\n");
 	fprintf(stderr,"%s: -b filename.mp4 filename.mp4 > filename-sh\n",cmd);
 	fprintf(stderr,"Edit filename-sh for mis detection and re execute next cmd\n",cmd);
@@ -76,12 +78,15 @@ static int txtrecheck=0;
 static int cmdexecute=0;
 static int checkcomplete=0;
 static int basets=0;
+static int syncadjust=0;
+static char *SELFEXEC=NULL;
 
 static char *MP4BOXCMDRAPSTR="Adjusting chunk start time to previous random access at ";
 #ifdef __FreeBSD__
 static char *MP4BOXCMD="/usr/local/bin/MP4Box";
 static char *SOXCMD="/usr/local/bin/sox";
 static char *FFMPEGCMD="/usr/local/bin/ffmpeg";
+static char *FFPROBECMD="/usr/local/bin/ffprobe";
 static char *MPLAYERCMD="/usr/local/bin/mplayer";
 static char *AACENCCMD="/usr/local/bin/aacplusenc";
 static char *AACENCOPT="%s '%s.wav' '%s' 60";
@@ -91,12 +96,148 @@ static char *FIXASS="/usr/home/piro/bin/fixass";
 static char *MP4BOXCMD="MP4Box";
 static char *SOXCMD="sox";
 static char *FFMPEGCMD="ffmpeg";
+static char *FFPROBECMD="ffprobe";
 static char *MPLAYERCMD="mplayer";
 static char *AACENCCMD="neroAacEnc";
 static char *AACENCOPT="%s -br 60 -if '%s.wav' -of '%s'";
 static char *FAADCMD=NULL;
 static char *FIXASS="fixass";
 #endif
+
+static int round_msec(double sec)
+{
+	if (sec >= 0) return (int)(sec * 1000.0 + 0.5);
+	return (int)(sec * 1000.0 - 0.5);
+}
+
+static char *shellquote(char *str)
+{
+	char *buf,*p;
+	int i,len;
+
+	len=3;
+	for(i=0;str[i];i++) {
+		if (str[i]=='\'') len+=4;
+		else len++;
+	}
+	buf=malloc(len);
+	p=buf;
+	*p++='\'';
+	for(i=0;str[i];i++) {
+		if (str[i]=='\'') {
+			memcpy(p,"'\\''",4);
+			p+=4;
+		}
+		else *p++=str[i];
+	}
+	*p++='\'';
+	*p=0x00;
+	return buf;
+}
+
+static int read_stream_info(char *filename,char *streamtype,double *starttime,int *trackid)
+{
+	FILE *pp;
+	char *cmd,*qfilename;
+	char pbuf[1024];
+	int found_start,found_track;
+
+	qfilename = shellquote(filename);
+	asprintf(&cmd,"%s -v error -select_streams %s:0 -show_entries stream=id,start_time -of default=noprint_wrappers=1 %s",
+	    FFPROBECMD,streamtype,qfilename);
+	free(qfilename);
+
+	pp = popen(cmd,"r");
+	free(cmd);
+	if (pp == NULL) return -1;
+
+	found_start=found_track=0;
+	while(fgets(pbuf,sizeof(pbuf),pp)!=NULL){
+		if (strncmp(pbuf,"id=",3)==0) {
+			*trackid = (int)strtol(pbuf+3,NULL,0);
+			found_track=1;
+		}
+		else if (strncmp(pbuf,"start_time=",11)==0) {
+			if (strncmp(pbuf+11,"N/A",3)!=0) {
+				*starttime = atof(pbuf+11);
+				found_start=1;
+			}
+		}
+	}
+	pclose(pp);
+
+	if (!found_track || !found_start) return -1;
+	return 0;
+}
+
+static int sync_adjust_mp4(char *filename)
+{
+	char *newfilename,*qnewfilename,*cmd;
+	double org_v_start,org_a_start,new_v_start,new_a_start;
+	double org_offset,new_offset,target_audio_start;
+	int org_v_track,org_a_track,new_v_track,new_a_track;
+	int target_delay_ms,current_delay_ms;
+	int ret;
+
+	asprintf(&newfilename,"%s-new.mp4",filename);
+	if (read_stream_info(filename,"v",&org_v_start,&org_v_track) != 0) {
+		fprintf(stderr,"sync adjust: cannot read source video stream: %s\n",filename);
+		free(newfilename);
+		return 1;
+	}
+	if (read_stream_info(filename,"a",&org_a_start,&org_a_track) != 0) {
+		fprintf(stderr,"sync adjust: cannot read source audio stream: %s\n",filename);
+		free(newfilename);
+		return 1;
+	}
+	if (read_stream_info(newfilename,"v",&new_v_start,&new_v_track) != 0) {
+		fprintf(stderr,"sync adjust: cannot read output video stream: %s\n",newfilename);
+		free(newfilename);
+		return 1;
+	}
+	if (read_stream_info(newfilename,"a",&new_a_start,&new_a_track) != 0) {
+		fprintf(stderr,"sync adjust: cannot read output audio stream: %s\n",newfilename);
+		free(newfilename);
+		return 1;
+	}
+
+	org_offset = org_a_start - org_v_start;
+	new_offset = new_a_start - new_v_start;
+	target_audio_start = new_v_start + org_offset;
+	target_delay_ms = round_msec(target_audio_start);
+	current_delay_ms = round_msec(new_a_start);
+
+	fprintf(stderr,
+	    "sync adjust: original av offset %.3f sec, output av offset %.3f sec, target audio start %.3f sec\n",
+	    org_offset,new_offset,target_audio_start);
+
+	if (target_delay_ms < 0) {
+		fprintf(stderr,"sync adjust: negative target audio delay is not supported: %d ms\n",target_delay_ms);
+		free(newfilename);
+		return 1;
+	}
+	if (target_delay_ms == current_delay_ms) {
+		fprintf(stderr,"sync adjust: audio delay already matches target: %d ms\n",target_delay_ms);
+		free(newfilename);
+		return 0;
+	}
+
+	qnewfilename = shellquote(newfilename);
+	asprintf(&cmd,"%s -quiet -noprog -delay %d=%d %s",
+	    MP4BOXCMD,new_a_track,target_delay_ms,qnewfilename);
+	free(qnewfilename);
+
+	ret = system(cmd);
+	free(cmd);
+	if (ret != 0) {
+		fprintf(stderr,"sync adjust: MP4Box delay failed: %s\n",newfilename);
+		free(newfilename);
+		return 1;
+	}
+	fprintf(stderr,"sync adjust: set audio track %d delay to %d ms\n",new_a_track,target_delay_ms);
+	free(newfilename);
+	return 0;
+}
 
 FILE *checkMP4(FILE *f,char *filename)
 {
@@ -256,6 +397,7 @@ int dumpinfo(int mcnt)
 	int honstart,hcnt,totalsec;
 	int i,pre;
 	char *cptr,*cptr2,*tfptr;
+	char *qptr,*qptr2;
 	TCLIST *cmdlist;
 	TCLIST *tflist;
 	FILE *fp;
@@ -376,6 +518,15 @@ int dumpinfo(int mcnt)
 
 			asprintf(&cptr,"%s -quiet -noprog -add '%s.aac' '%s-new.mp4'",MP4BOXCMD,wkfilename,wkfilename);
 			tclistpush2(cmdlist,cptr);
+			free(cptr);
+
+			qptr = shellquote(SELFEXEC?SELFEXEC:"cmcheckwave");
+			qptr2 = shellquote(wkfilename);
+			asprintf(&cptr,"%s -S %s",qptr,qptr2);
+			free(qptr);
+			free(qptr2);
+			tclistpush2(cmdlist,cptr);
+			free(cptr);
 		}
 
 		/* wkfilename.mp4.assファイルがあったらfixassを実施  */
@@ -684,8 +835,12 @@ int main(int argc, char *argv[])
 	ret = -1;
 
 	argv0 = argv[0];
-	while ((ch = getopt(argc, argv, "agdtxb:m:v:c:")) != -1){
+	SELFEXEC = argv[0];
+	while ((ch = getopt(argc, argv, "Sagdtxb:m:v:c:")) != -1){
 		switch (ch){
+			case 'S':
+				syncadjust=1;
+				break;
 			case 'a':
 				noaudioencode=1;
 				break;
@@ -726,6 +881,7 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 	if (tmpenv=getenv("FFMPEG")) FFMPEGCMD=tmpenv;
+	if (tmpenv=getenv("FFPROBE")) FFPROBECMD=tmpenv;
 	if (tmpenv=getenv("SOX")) SOXCMD=tmpenv;
 	if (tmpenv=getenv("MP4BOX")) MP4BOXCMD=tmpenv;
 	if (tmpenv=getenv("MP4BOXCMDRAPSTR")) MP4BOXCMDRAPSTR=tmpenv;
@@ -736,6 +892,7 @@ int main(int argc, char *argv[])
 #ifdef DEBUG
 	if ((FAADCMD) && (tmpenv=getenv("FORCEFFMPEGCMD"))) FAADCMD = NULL;
 #endif
+	if (syncadjust) return sync_adjust_mp4(argv[0]);
 
 	ret=0;
 	p=NULL;
@@ -759,7 +916,3 @@ int main(int argc, char *argv[])
 
 	return ret;
 }
-
-
-
-
