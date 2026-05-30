@@ -507,14 +507,15 @@ int dumpinfo(int mcnt)
 			tclistpush2(cmdlist,cptr);
 			free(cptr);
 
-			qptr = shellquote(SELFEXEC?SELFEXEC:"cmcheckwave");
-			qptr2 = shellquote(wkfilename);
-			asprintf(&cptr,"%s -S %s",qptr,qptr2);
-			free(qptr);
-			free(qptr2);
-			tclistpush2(cmdlist,cptr);
-			free(cptr);
 		}
+
+		qptr = shellquote(SELFEXEC?SELFEXEC:"cmcheckwave");
+		qptr2 = shellquote(wkfilename);
+		asprintf(&cptr,"%s -S %s",qptr,qptr2);
+		free(qptr);
+		free(qptr2);
+		tclistpush2(cmdlist,cptr);
+		free(cptr);
 
 		/* wkfilename.mp4.assファイルがあったらfixassを実施  */
 		asprintf(&cptr,"%s.ass",wkfilename);

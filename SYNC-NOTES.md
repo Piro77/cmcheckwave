@@ -52,8 +52,9 @@ If `target_delay_ms` differs from the current output audio start, it runs:
 MP4Box -quiet -noprog -delay <audioTrackID>=<target_delay_ms> filename.mp4-new.mp4
 ```
 
-The existing cut command generation now appends this correction after the AAC
-track is added.
+The existing cut command generation now appends this correction whenever
+`filename.mp4-new.mp4` is created. This applies both to the normal AAC
+re-encode path and the `-a` no-audio-reencode path.
 
 ## Limitations
 
