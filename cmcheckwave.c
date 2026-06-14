@@ -58,6 +58,8 @@ typedef struct {
 	int  stsec;
 	int  edsec;
 	int  diffs;
+	int  audiostsec;
+	int  audioedsec;
 	char cmflg;
 	char honpen;
 	int  peak;
@@ -79,7 +81,12 @@ static int cmdexecute=0;
 static int checkcomplete=0;
 static int basets=0;
 static int syncadjust=0;
+static int ptsdetect=0;
+static double mp4_audio_start=0.0;
+static double mp4_video_start=0.0;
 static char *SELFEXEC=NULL;
+
+int dumpinfo(int mcnt);
 
 static char *MP4BOXCMDRAPSTR="Adjusting chunk start time to previous random access at ";
 #ifdef __FreeBSD__
@@ -272,6 +279,158 @@ FILE *checkMP4(FILE *f,char *filename)
 	return pp;
 }
 
+static int is_mp4_file(FILE *f)
+{
+	char readbuf[20];
+
+	memset(readbuf,0,sizeof(readbuf));
+	fread(readbuf,sizeof(readbuf),1,f);
+	rewind(f);
+	return strstr(readbuf+4,"ftypisom") != NULL;
+}
+
+static void classify_cm_marks(int mcnt)
+{
+	int i,j;
+	int cmwork;
+
+	if (mcnt > 1) {
+		//本編前CMチェック
+		if ((m[0].cmflg==0) && (m[0].diffs < 15000))
+			m[0].cmflg=1;
+		//細切れCMのたしこみ
+		for(i=1;i<mcnt-1;i++) {
+			// 本編で31秒以下が連続だったら、次の31秒以上の本編もしくはCMまでの時間をチェック
+			// 足しこみは61秒まで
+			// TODO 28+32で60秒CMとかいうのがあるどうするのがいいだろうか・・・
+			if (m[i].cmflg==0 && m[i].diffs < 31000  && m[i+1].cmflg==0 && m[i+1].diffs < 31000) {
+				cmwork=0;
+				for(j=i;j<mcnt;j++) {
+					if (m[j].cmflg==1) break;
+					if (m[j].diffs > 31000) break;
+					if (cmwork + m[j].diffs > 61000) break;
+					cmwork = cmwork + m[j].diffs;
+				}
+				//合計時間を15秒で割ってcm時間っぽいならばCMとする。
+				// TODO 30(15)秒以下の条件付けがいる？60秒どうする？
+				if (cmwork%15000>14500 || cmwork%15000<500) {
+					for(j=i;j<mcnt;j++) {
+						if (m[j].cmflg==1) break;
+						if (m[j].diffs > 31000) break;
+						m[j].cmflg=1;
+					}
+				}
+			}
+
+		}
+		// 最終CMチェック
+		if ((m[mcnt-1].cmflg==0) && (m[mcnt-1].diffs < 15000))
+			m[mcnt-1].cmflg=1;
+		//短い本編・提供などの処理
+		for(i=1;i<mcnt-1;i++) {
+			//本編で46秒以下かつ、前後がCMの場合CM14-16,29-31,44-46秒でもCMとする。
+			if (m[i].cmflg==0 && m[i].diffs < 46000 && m[i-1].cmflg==1 && m[i+1].cmflg==1) {
+				if ((m[i].diffs > 14000) && (m[i].diffs < 16000)) m[i].cmflg=1;
+				if ((m[i].diffs > 29000) && (m[i].diffs < 31000)) m[i].cmflg=1;
+				if ((m[i].diffs > 44000) && (m[i].diffs < 46000)) m[i].cmflg=1;
+				// 0.9秒以下(おそらく前後ＣＭのあまり時間)
+				if (m[i].diffs < 900) m[i].cmflg=1;
+
+				//10,5秒のときは提供とみなし、その前を本編にする。
+				//TODO 15秒提供は判別不能・・・
+				if ((m[i].diffs > 9500) && (m[i].diffs < 10500)) m[i-1].cmflg=0;
+				if ((m[i].diffs > 4500) && (m[i].diffs < 5500)) m[i-1].cmflg=0;
+			}
+			// TODO 前後が本編で単独でCMの場合は本編とする?
+			// 46秒以下のチェックも?
+			// if (m[i].cmflg==1 && m[i-1].cmflg==0 && m[i+1].cmflg==0) {
+			// 	m[i].cmflg=0;
+			// }
+		}
+
+	}
+}
+
+int cmcheckmp4pts(char *filename)
+{
+	FILE *pp;
+	char *cmd,*qfilename;
+	char pbuf[1024];
+	double silence_start,silence_end,silence_duration,noise;
+	int have_start,mcnt,kankaku;
+	int atrack,vtrack;
+	int status;
+
+	memset(m,0,sizeof(m));
+	memset(h,0,sizeof(h));
+
+	mp4_audio_start=0.0;
+	mp4_video_start=0.0;
+	if (read_stream_info(filename,"a",&mp4_audio_start,&atrack) != 0) {
+		fprintf(stderr,"pts detect: cannot read audio stream metadata: %s\n",filename);
+		return -1;
+	}
+	if (read_stream_info(filename,"v",&mp4_video_start,&vtrack) != 0) {
+		fprintf(stderr,"pts detect: cannot read video stream metadata: %s\n",filename);
+		return -1;
+	}
+
+	noise = defmax / 32768.0;
+	if (noise <= 0.0) noise = 1.0 / 32768.0;
+	qfilename = shellquote(filename);
+	asprintf(&cmd,"%s -hide_banner -nostats -i %s -map 0:a:0 -af asetpts=PTS-STARTPTS,silencedetect=noise=%.10f:d=%.3f -f null - 2>&1",
+	    FFMPEGCMD,qfilename,noise,defmuon/1000.0);
+	free(qfilename);
+
+	pp = popen(cmd,"r");
+	free(cmd);
+	if (pp == NULL) return -1;
+
+	have_start=0;
+	mcnt=0;
+	kankaku=round_msec(mp4_audio_start);
+	while(fgets(pbuf,sizeof(pbuf),pp)!=NULL){
+		char *p;
+
+		p = strstr(pbuf,"silence_start:");
+		if (p) {
+			silence_start = atof(p + strlen("silence_start:"));
+			have_start=1;
+			continue;
+		}
+
+		p = strstr(pbuf,"silence_end:");
+		if (p && have_start && mcnt < (int)(sizeof(m)/sizeof(m[0]))) {
+			silence_end = 0.0;
+			silence_duration = 0.0;
+			sscanf(p,"silence_end: %lf | silence_duration: %lf",&silence_end,&silence_duration);
+			if (silence_duration * 1000.0 >= defmuon) {
+				m[mcnt].audiostsec = round_msec(silence_start);
+				m[mcnt].audioedsec = round_msec(silence_end);
+				m[mcnt].stsec = round_msec(mp4_audio_start + silence_start);
+				m[mcnt].edsec = round_msec(mp4_audio_start + silence_end);
+				m[mcnt].diffs = m[mcnt].edsec - kankaku;
+				m[mcnt].cmflg = 0;
+				m[mcnt].honpen = 0;
+
+				if ((m[mcnt].diffs > 14500) && (m[mcnt].diffs < 15500)) m[mcnt].cmflg=1;
+				if ((m[mcnt].diffs > 29500) && (m[mcnt].diffs < 30500)) m[mcnt].cmflg=1;
+				if ((m[mcnt].diffs > 59500) && (m[mcnt].diffs < 60500)) m[mcnt].cmflg=1;
+
+				kankaku=m[mcnt].edsec;
+				mcnt++;
+			}
+			have_start=0;
+		}
+	}
+	status = pclose(pp);
+	if (status != 0) return -1;
+
+	ptsdetect=1;
+	classify_cm_marks(mcnt);
+	return dumpinfo(mcnt);
+}
+
 int checkMP4RAP(int stsec,int edsec)
 {
 	FILE *pp;
@@ -423,6 +582,19 @@ int dumpinfo(int mcnt)
 	}
 
 	printf("# total %.2f\n\n",totalsec/1000.0);
+	if (ptsdetect) {
+		printf("# pts audio_start %.3f video_start %.3f offset %.3f\n",
+		    mp4_audio_start,mp4_video_start,mp4_audio_start-mp4_video_start);
+		for(i=0;i<mcnt;i++) {
+			printf("# pts %d audio %.3f %.3f mp4 %.3f %.3f video_rel %.3f %.3f\n",
+			    i,
+			    m[i].audiostsec/1000.0,m[i].audioedsec/1000.0,
+			    m[i].stsec/1000.0,m[i].edsec/1000.0,
+			    m[i].stsec/1000.0-mp4_video_start,
+			    m[i].edsec/1000.0-mp4_video_start);
+		}
+		printf("\n");
+	}
 
 	cmdlist = tclistnew();
 	tflist = tclistnew();
@@ -635,7 +807,7 @@ int rechecktext(FILE *f)
 
 int cmcheckwave(FILE *f)
 {
-	int i,j, x, channels, bits;
+	int i, x, channels, bits;
 	unsigned long len;
 	unsigned char s[5];
 	unsigned long bsec;
@@ -643,7 +815,6 @@ int cmcheckwave(FILE *f)
 	double diffs;
 	int mcnt,rcnt,readbufsz;
 	unsigned char *readbuf;
-	int cmwork;
 	int peak;
 
 	if (memcmp(get_bytes(f, 4), "RIFF", 4) != 0) {
@@ -746,61 +917,7 @@ int cmcheckwave(FILE *f)
 			}
 		}
 	}
-	if (mcnt > 1) {
-		//本編前CMチェック
-		if ((m[0].cmflg==0) && (m[0].diffs < 15000))
-			m[0].cmflg=1;
-		//細切れCMのたしこみ
-		for(i=1;i<mcnt-1;i++) {
-			// 本編で31秒以下が連続だったら、次の31秒以上の本編もしくはCMまでの時間をチェック
-			// 足しこみは61秒まで
-			// TODO 28+32で60秒CMとかいうのがあるどうするのがいいだろうか・・・
-			if (m[i].cmflg==0 && m[i].diffs < 31000  && m[i+1].cmflg==0 && m[i+1].diffs < 31000) {
-				cmwork=0;
-				for(j=i;j<mcnt;j++) {
-					if (m[j].cmflg==1) break;
-					if (m[j].diffs > 31000) break;
-					if (cmwork + m[j].diffs > 61000) break;
-					cmwork = cmwork + m[j].diffs;
-				}
-				//合計時間を15秒で割ってcm時間っぽいならばCMとする。
-				// TODO 30(15)秒以下の条件付けがいる？60秒どうする？
-				if (cmwork%15000>14500 || cmwork%15000<500) {
-					for(j=i;j<mcnt;j++) {
-						if (m[j].cmflg==1) break;
-						if (m[j].diffs > 31000) break;
-						m[j].cmflg=1;
-					}
-				}
-			}
-
-		}
-		// 最終CMチェック
-		if ((m[mcnt-1].cmflg==0) && (m[mcnt-1].diffs < 15000))
-			m[mcnt-1].cmflg=1;
-		//短い本編・提供などの処理
-		for(i=1;i<mcnt-1;i++) {
-			//本編で46秒以下かつ、前後がCMの場合CM14-16,29-31,44-46秒でもCMとする。
-			if (m[i].cmflg==0 && m[i].diffs < 46000 && m[i-1].cmflg==1 && m[i+1].cmflg==1) {
-				if ((m[i].diffs > 14000) && (m[i].diffs < 16000)) m[i].cmflg=1;
-				if ((m[i].diffs > 29000) && (m[i].diffs < 31000)) m[i].cmflg=1;
-				if ((m[i].diffs > 44000) && (m[i].diffs < 46000)) m[i].cmflg=1;
-				// 0.9秒以下(おそらく前後ＣＭのあまり時間)
-				if (m[i].diffs < 900) m[i].cmflg=1;
-
-				//10,5秒のときは提供とみなし、その前を本編にする。
-				//TODO 15秒提供は判別不能・・・
-				if ((m[i].diffs > 9500) && (m[i].diffs < 10500)) m[i-1].cmflg=0;
-				if ((m[i].diffs > 4500) && (m[i].diffs < 5500)) m[i-1].cmflg=0;
-			}
-			// TODO 前後が本編で単独でCMの場合は本編とする?
-			// 46秒以下のチェックも?
-			// if (m[i].cmflg==1 && m[i-1].cmflg==0 && m[i+1].cmflg==0) {
-			// 	m[i].cmflg=0;
-			// }
-		}
-
-	}
+	classify_cm_marks(mcnt);
 	return dumpinfo(mcnt);
 }
 
@@ -881,6 +998,15 @@ int main(int argc, char *argv[])
 	else {
 		f = fopen(argv[0],"rb");
 		if (f) {
+			if (is_mp4_file(f)) {
+				wkfilename = strdup(argv[0]);
+				ret = cmcheckmp4pts(argv[0]);
+				if (ret == 0) {
+					fclose(f);
+					return ret;
+				}
+				ptsdetect=0;
+			}
 			p = checkMP4(f,argv[0]);
 		}
 		else
