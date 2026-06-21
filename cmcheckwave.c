@@ -644,10 +644,16 @@ int dumpinfo(int mcnt)
 
 			asprintf(&tfptr,"%s.%d.wav",wkfilename,i);
 
+			/*
+			 * 再エンコード用のWAV抽出はffmpegを優先する。
+			 * 破損AACフレームが落ちた場合でも、PTSの隙間を無音で埋めて
+			 * カット後の音声タイムラインを映像側に合わせる。
+			 */
 			if (FAADCMD)
-				asprintf(&cptr,"%s -d -q -o '%s' '%s.%d.mp4' ",FAADCMD,tfptr,wkfilename,i);
+				asprintf(&cptr,"( %s -v 0 -i '%s.%d.mp4' -vn -af aresample=async=1000:first_pts=0 '%s' ) || %s -d -q -o '%s' '%s.%d.mp4' ",
+				    FFMPEGCMD,wkfilename,i,tfptr,FAADCMD,tfptr,wkfilename,i);
 			else
-				asprintf(&cptr,"%s -v 0 -i '%s.%d.mp4' -vn '%s'",FFMPEGCMD,wkfilename,i,tfptr);
+				asprintf(&cptr,"%s -v 0 -i '%s.%d.mp4' -vn -af aresample=async=1000:first_pts=0 '%s'",FFMPEGCMD,wkfilename,i,tfptr);
 			tclistpush2(cmdlist,cptr);
 			tclistpush2(tflist,tfptr);
 			free(tfptr);
