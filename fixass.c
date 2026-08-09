@@ -7,21 +7,162 @@
 
 static double delay;
 
+#ifdef __FreeBSD__
+static char *FFPROBECMD="/usr/local/bin/ffprobe";
+#else
+static char *FFPROBECMD="ffprobe";
+#endif
+
+typedef struct {
+  double start;
+  double end;
+}KEEPRANGE;
+
 typedef struct {
   double totalcut;
   double nextstart;
-  double cutstart; //ƒJƒbƒgŠJŽnˆÊ’u
-  double cutend;   //ƒJƒbƒgI—¹ˆÊ’u
+  double cutstart; //ã‚«ãƒƒãƒˆé–‹å§‹ä½ç½®
+  double cutend;   //ã‚«ãƒƒãƒˆçµ‚äº†ä½ç½®
 }CUTTM;
 
 void usage(char *argv0)
 {
-  printf("Usage:%s -d delay filename.mp4\n",argv0);
-  printf("	Read CutInfo from filename.mp4.split.log\n");
+  printf("Usage:%s [-d delay] [-r start:end ...] filename.mp4\n",argv0);
+  printf("	-r reads actual durations from filename.mp4.N.mp4 using ffprobe\n");
+  printf("	Without -r, read CutInfo from filename.mp4.split.log\n");
   printf("	Read AssFile from filename.mp4.ass\n");
   printf("	OutputFixed ASS to stdout\n");
   printf("	option -d delay(delay sec)\n\n");
   exit(1);
+}
+
+static char *shellquote(const char *str)
+{
+  char *buf,*p;
+  int i,len;
+
+  len=3;
+  for(i=0;str[i];i++) {
+    if (str[i]=='\'') len+=4;
+    else len++;
+  }
+  buf=malloc(len);
+  p=buf;
+  *p++='\'';
+  for(i=0;str[i];i++) {
+    if (str[i]=='\'') {
+      memcpy(p,"'\\''",4);
+      p+=4;
+    }
+    else *p++=str[i];
+  }
+  *p++='\'';
+  *p=0x00;
+  return buf;
+}
+
+static int parse_range(const char *str,KEEPRANGE *range)
+{
+  char *endptr;
+
+  range->start=strtod(str,&endptr);
+  if (endptr==str || *endptr!=':') return -1;
+  range->end=strtod(endptr+1,&endptr);
+  if (*endptr!='\0' || range->start < 0 || range->end <= range->start) return -1;
+  return 0;
+}
+
+/* Prefer the longest media stream duration over the rounded container value. */
+static int probe_duration(const char *filename,double *duration)
+{
+  FILE *pp;
+  char *cmd,*qfilename;
+  char rbuf[1024];
+  double stream_duration,format_duration,value;
+  long long duration_ts;
+  long timebase_num,timebase_den;
+  int status;
+
+  qfilename=shellquote(filename);
+  asprintf(&cmd,"%s -v error -show_entries stream=codec_type,duration_ts,time_base,duration:format=duration -of compact=p=0:nk=0 %s 2>/dev/null",
+      FFPROBECMD,qfilename);
+  free(qfilename);
+  pp=popen(cmd,"r");
+  free(cmd);
+  if (pp==NULL) return -1;
+
+  stream_duration=0.0;
+  format_duration=0.0;
+  while(fgets(rbuf,sizeof(rbuf),pp)!=NULL) {
+    char *valueptr=strstr(rbuf,"duration=");
+    char *typeptr=strstr(rbuf,"codec_type=");
+    if (typeptr && (strncmp(typeptr+11,"video",5)==0 || strncmp(typeptr+11,"audio",5)==0)) {
+      char *tsptr=strstr(rbuf,"duration_ts=");
+      char *tbptr=strstr(rbuf,"time_base=");
+      value=0.0;
+      if (tsptr && strncmp(tsptr+12,"N/A",3)!=0 && tbptr &&
+          sscanf(tbptr+10,"%ld/%ld",&timebase_num,&timebase_den)==2 && timebase_den!=0) {
+        duration_ts=strtoll(tsptr+12,NULL,10);
+        value=(double)duration_ts*timebase_num/timebase_den;
+      }
+      else if (valueptr && strncmp(valueptr+9,"N/A",3)!=0) {
+        value=strtod(valueptr+9,NULL);
+      }
+      if (value > stream_duration) stream_duration=value;
+    }
+    else if (!typeptr) {
+      if (!valueptr || strncmp(valueptr+9,"N/A",3)==0) continue;
+      value=strtod(valueptr+9,NULL);
+      if (value > format_duration) format_duration=value;
+    }
+  }
+  status=pclose(pp);
+  if (status!=0) return -1;
+  if (stream_duration > 0.0) *duration=stream_duration;
+  else if (format_duration > 0.0) *duration=format_duration;
+  else return -1;
+  return 0;
+}
+
+static TCLIST *readranges(const char *basename,TCLIST *ranges)
+{
+  TCLIST *cutlist;
+  CUTTM cut;
+  KEEPRANGE *range;
+  double duration,actualstart,nextstart,totalcut;
+  int i,sp;
+  char *chunkname;
+
+  cutlist=tclistnew();
+  nextstart=totalcut=0.0;
+  for(i=0;i<tclistnum(ranges);i++) {
+    range=(KEEPRANGE *)tclistval(ranges,i,&sp);
+    asprintf(&chunkname,"%s.%d.mp4",basename,i);
+    if (probe_duration(chunkname,&duration)!=0) {
+      fprintf(stderr,"fixass: cannot read split duration: %s\n",chunkname);
+      free(chunkname);
+      return NULL;
+    }
+    free(chunkname);
+
+    /* MP4Box -splitx keeps the requested end and moves only the start RAP. */
+    actualstart=range->end-duration;
+    if (actualstart < 0.0 && actualstart > -0.1) actualstart=0.0;
+    if (actualstart < 0.0 || actualstart > range->end) {
+      fprintf(stderr,"fixass: invalid split duration %.6f for range %.3f:%.3f\n",
+          duration,range->start,range->end);
+      return NULL;
+    }
+
+    cut.cutstart=nextstart;
+    cut.cutend=actualstart;
+    totalcut += actualstart-nextstart;
+    nextstart=actualstart+duration;
+    cut.totalcut=totalcut;
+    cut.nextstart=nextstart;
+    tclistpush(cutlist,&cut,sizeof(CUTTM));
+  }
+  return cutlist;
 }
 
 char *getfixtimestr(double asstime,TCLIST *cutlist)
@@ -36,7 +177,7 @@ char *getfixtimestr(double asstime,TCLIST *cutlist)
   for(i=0;i<tclistnum(cutlist);i++) {
     int sp;
     cuttm = (CUTTM *)tclistval(cutlist,i,&sp);
-    //ƒJƒbƒg”ÍˆÍ‚ÌŽš–‹‚ÍŽÌ‚Ä‚é
+    //ã‚«ãƒƒãƒˆç¯„å›²ã®å­—å¹•ã¯æ¨ã¦ã‚‹
     if (asstime >= cuttm->cutstart && asstime <= cuttm->cutend) return NULL;
     if (asstime < cuttm->nextstart) break;
   }
@@ -112,7 +253,7 @@ void cutass(char *assfile,TCLIST *cutlist)
   fclose(fp);
 }
 /*
- *   MP4‚Ìsplit.log‚©‚çƒJƒbƒgˆÊ’u‚ÆƒJƒbƒgŽžŠÔ‚ðŽZo
+ *   MP4ã®split.logã‹ã‚‰ã‚«ãƒƒãƒˆä½ç½®ã¨ã‚«ãƒƒãƒˆæ™‚é–“ã‚’ç®—å‡º
  */
 TCLIST *readlog(char *logfile)
 {
@@ -150,7 +291,7 @@ TCLIST *readlog(char *logfile)
       // find cut end pos
       p=strstr(rbuf," duration ");
       if (p) {
-        duration = strtod(p+strlen(" duration "),NULL); // –{•Ò‚ÌŽžŠÔ
+        duration = strtod(p+strlen(" duration "),NULL); // æœ¬ç·¨ã®æ™‚é–“
         chkflg=0;
         listnum=tclistnum(cutlist);
         if (listnum==0)  {
@@ -164,7 +305,7 @@ TCLIST *readlog(char *logfile)
         cut.cutend = sttime;
         }
 	totalcut = totalcut + (sttime - nextstart);
-	nextstart = sttime+duration;              //  ƒJƒbƒgŠJŽnˆÊ’u+–{•ÒŽžŠÔ=ŽŸ‚ÌƒJƒbƒgŠJŽnŽžŠÔ
+	nextstart = sttime+duration;              //  ã‚«ãƒƒãƒˆé–‹å§‹ä½ç½®+æœ¬ç·¨æ™‚é–“=æ¬¡ã®ã‚«ãƒƒãƒˆé–‹å§‹æ™‚é–“
         /* asprintf(&p,"%.2f,%.2f",nextstart,totalcut); */
         cut.totalcut = totalcut;
         cut.nextstart = nextstart;
@@ -184,17 +325,26 @@ int main(int argc,char *argv[])
         int ch;
         char *argv0;
         char *assfile,*mp4boxsplitlog;
-	TCLIST *cutlist;
+	TCLIST *cutlist,*ranges;
+	KEEPRANGE range;
+	char *tmpenv;
 
 	delay = 0;
+	ranges = tclistnew();
         argv0 = argv[0];
-        while ((ch = getopt(argc, argv, "ad:")) != -1){
+        while ((ch = getopt(argc, argv, "ad:r:")) != -1){
             switch (ch){
               case 'a':
                 break;
               case 'd':
                 delay=atof(optarg);
-		printf("delay %f\n",delay);
+                break;
+              case 'r':
+                if (parse_range(optarg,&range)!=0) {
+                  fprintf(stderr,"fixass: invalid range: %s\n",optarg);
+                  return 1;
+                }
+                tclistpush(ranges,&range,sizeof(KEEPRANGE));
                 break;
               default:
                 usage(argv0);
@@ -205,13 +355,18 @@ int main(int argc,char *argv[])
 
         if (argc != 1) {
             usage(argv0);
-            return 0;
+            return 1;
         }
+	if ((tmpenv=getenv("FFPROBE"))) FFPROBECMD=tmpenv;
 
         asprintf(&assfile,"%s.ass",argv[0]);
         asprintf(&mp4boxsplitlog,"%s.split.log",argv[0]);
 
-	cutlist = readlog(mp4boxsplitlog);
+	if (tclistnum(ranges)>0)
+	  cutlist = readranges(argv[0],ranges);
+	else
+	  cutlist = readlog(mp4boxsplitlog);
+	if (cutlist==NULL) return 1;
         cutass(assfile,cutlist);
 
 	exit(0);

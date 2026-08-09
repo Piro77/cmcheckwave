@@ -14,6 +14,7 @@
  *************************************************************************************************/
 
 #include "tclist.h"
+#include <string.h>
 
 /* Get the larger value of two integers. */
 long tclmax(long a, long b){
@@ -124,5 +125,4 @@ TCLIST *tcstrsplit(const char *str, const char *delims){
   }
   return list;
 }
-
 

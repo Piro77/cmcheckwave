@@ -85,6 +85,9 @@ static int ptsdetect=0;
 static double mp4_audio_start=0.0;
 static double mp4_video_start=0.0;
 static char *SELFEXEC=NULL;
+static double *rap_times=NULL;
+static int rap_count=0;
+static int rap_loaded=0;
 
 int dumpinfo(int mcnt);
 
@@ -431,30 +434,67 @@ int cmcheckmp4pts(char *filename)
 	return dumpinfo(mcnt);
 }
 
-int checkMP4RAP(int stsec,int edsec)
+static int load_rap_times(void)
 {
 	FILE *pp;
-	char pbuf[1024];
-	char cmdbuf[1024];
-	float rap;
+	char pbuf[1024],*ptsptr,*flagptr;
+	char *cmd,*qfilename;
+	double pts;
+	int rap_capacity,status;
 
-	if (wkfilename==NULL) return stsec;
+	if (rap_loaded!=0) return rap_loaded>0 ? 0 : -1;
+	rap_loaded=-1;
+	if (wkfilename==NULL) return -1;
 
-	sprintf(cmdbuf,"%s -quiet -noprog -splitx %.2f:%.2f '%s' -out /dev/null 2>&1",MP4BOXCMD,edsec/1000.0,(edsec+10000)/1000.0,wkfilename);
+	qfilename=shellquote(wkfilename);
+	asprintf(&cmd,"%s -v error -select_streams v:0 -show_packets -show_entries packet=pts_time,flags -of compact=p=0:nk=0 %s 2>/dev/null",
+	    FFPROBECMD,qfilename);
+	free(qfilename);
 
-	rap=0.0;
-	pp = popen(cmdbuf,"r");
-	if (pp == NULL) return stsec;
+	pp=popen(cmd,"r");
+	free(cmd);
+	if (pp==NULL) return -1;
+	rap_capacity=0;
 	while(fgets(pbuf,1024,pp)!=NULL){
-		if (strstr(pbuf,MP4BOXCMDRAPSTR)) {
-			sscanf(pbuf+strlen(MP4BOXCMDRAPSTR),"%f",&rap);
-			//TODO rapはCM開始フレームの秒数なのでちょっと戻す。
-			//     フレームレートとか調べないとだめだな・・・
-			rap = rap - 0.04;
+		ptsptr=strstr(pbuf,"pts_time=");
+		flagptr=strstr(pbuf,"flags=");
+		if (ptsptr && strncmp(ptsptr+9,"N/A",3)!=0 && flagptr && strchr(flagptr+6,'K')) {
+			pts=strtod(ptsptr+9,NULL);
+			if (rap_count>=rap_capacity) {
+				rap_capacity=rap_capacity ? rap_capacity*2 : 1024;
+				rap_times=realloc(rap_times,sizeof(double)*rap_capacity);
+				if (rap_times==NULL) {
+					pclose(pp);
+					return -1;
+				}
+			}
+			rap_times[rap_count++]=pts;
 		}
 	}
-	pclose(pp);
-	if (rap > 0 && stsec < rap*1000.0) return rap*1000.0;
+	status=pclose(pp);
+	if (status!=0 || rap_count==0) return -1;
+	rap_loaded=1;
+	return 0;
+}
+
+int checkMP4RAP(int stsec,int edsec)
+{
+	double target,rap;
+	int i;
+
+	if (load_rap_times()!=0) {
+		fprintf(stderr,"RAP detect: cannot read video key packet timestamps: %s\n",
+		    wkfilename?wkfilename:"(none)");
+		return stsec;
+	}
+	target=edsec/1000.0;
+	rap=0.0;
+	for(i=0;i<rap_count;i++) {
+		if (rap_times[i] <= target && rap_times[i] > rap) rap=rap_times[i];
+	}
+	/* Preserve the old one-frame-ish margin before the RAP. */
+	rap -= 0.04;
+	if (rap > 0 && stsec < rap*1000.0) return round_msec(rap);
 	else return stsec;
 
 }
@@ -701,9 +741,23 @@ int dumpinfo(int mcnt)
 		if (fp) {
 			free(cptr);
 			fclose(fp);
-			asprintf(&cptr,"%s '%s' > '%s.fix.ass'",FIXASS,wkfilename,wkfilename);
+			qptr = shellquote(FIXASS);
+			asprintf(&cptr2,"%s",qptr);
+			free(qptr);
+			for(i=0;i<hcnt;i++) {
+				asprintf(&cptr,"%s -r %.2f:%.2f",cptr2,
+				    h[i].stsec/1000.0,h[i].edsec/1000.0);
+				free(cptr2);
+				cptr2=cptr;
+			}
+			asprintf(&cptr,"rm -f '%s.fix.ass.tmp'; %s '%s' > '%s.fix.ass.tmp' && mv '%s.fix.ass.tmp' '%s.fix.ass'",
+			    wkfilename,cptr2,wkfilename,wkfilename,wkfilename,wkfilename);
+			free(cptr2);
 			tclistpush2(cmdlist,cptr);
 			free(cptr);
+			asprintf(&tfptr,"%s.fix.ass.tmp",wkfilename);
+			tclistpush2(tflist,tfptr);
+			free(tfptr);
 		}
 		else {
 			free(cptr);
@@ -992,6 +1046,7 @@ int main(int argc, char *argv[])
 	if ((tmpenv=getenv("AACENCPOT"))) AACENCOPT=tmpenv;
 	if ((tmpenv=getenv("MPLAYER"))) MPLAYERCMD=tmpenv;
 	if ((tmpenv=getenv("FAADCMD"))) FAADCMD=tmpenv;
+	if ((tmpenv=getenv("FIXASS"))) FIXASS=tmpenv;
 #ifdef DEBUG
 	if ((FAADCMD) && (tmpenv=getenv("FORCEFFMPEGCMD"))) FAADCMD = NULL;
 #endif
