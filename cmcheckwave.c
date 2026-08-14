@@ -85,13 +85,9 @@ static int ptsdetect=0;
 static double mp4_audio_start=0.0;
 static double mp4_video_start=0.0;
 static char *SELFEXEC=NULL;
-static double *rap_times=NULL;
-static int rap_count=0;
-static int rap_loaded=0;
 
 int dumpinfo(int mcnt);
 
-static char *MP4BOXCMDRAPSTR="Adjusting chunk start time to previous random access at ";
 #ifdef __FreeBSD__
 static char *MP4BOXCMD="/usr/local/bin/MP4Box";
 static char *SOXCMD="/usr/local/bin/sox";
@@ -434,74 +430,6 @@ int cmcheckmp4pts(char *filename)
 	return dumpinfo(mcnt);
 }
 
-static int load_rap_times(void)
-{
-	FILE *pp;
-	char pbuf[1024],*ptsptr,*flagptr;
-	char *cmd,*qfilename;
-	double pts,video_start;
-	int rap_capacity,status,video_track;
-
-	if (rap_loaded!=0) return rap_loaded>0 ? 0 : -1;
-	rap_loaded=-1;
-	if (wkfilename==NULL) return -1;
-	video_start=0.0;
-	if (read_stream_info(wkfilename,"v",&video_start,&video_track)!=0) return -1;
-
-	qfilename=shellquote(wkfilename);
-	asprintf(&cmd,"%s -v error -select_streams v:0 -show_packets -show_entries packet=pts_time,flags -of compact=p=0:nk=0 %s 2>/dev/null",
-	    FFPROBECMD,qfilename);
-	free(qfilename);
-
-	pp=popen(cmd,"r");
-	free(cmd);
-	if (pp==NULL) return -1;
-	rap_capacity=0;
-	while(fgets(pbuf,1024,pp)!=NULL){
-		ptsptr=strstr(pbuf,"pts_time=");
-		flagptr=strstr(pbuf,"flags=");
-		if (ptsptr && strncmp(ptsptr+9,"N/A",3)!=0 && flagptr && strchr(flagptr+6,'K')) {
-			/* ffprobe reports movie-timeline PTS, while MP4Box's old split
-			 * message reported time relative to the video track start. */
-			pts=strtod(ptsptr+9,NULL)-video_start;
-			if (rap_count>=rap_capacity) {
-				rap_capacity=rap_capacity ? rap_capacity*2 : 1024;
-				rap_times=realloc(rap_times,sizeof(double)*rap_capacity);
-				if (rap_times==NULL) {
-					pclose(pp);
-					return -1;
-				}
-			}
-			rap_times[rap_count++]=pts;
-		}
-	}
-	status=pclose(pp);
-	if (status!=0 || rap_count==0) return -1;
-	rap_loaded=1;
-	return 0;
-}
-
-int checkMP4RAP(int stsec,int edsec)
-{
-	double target,rap;
-	int i;
-
-	if (load_rap_times()!=0) {
-		fprintf(stderr,"RAP detect: cannot read video key packet timestamps: %s\n",
-		    wkfilename?wkfilename:"(none)");
-		return stsec;
-	}
-	target=edsec/1000.0;
-	rap=0.0;
-	for(i=0;i<rap_count;i++) {
-		if (rap_times[i] <= target && rap_times[i] > rap) rap=rap_times[i];
-	}
-	/* Preserve the old one-frame-ish margin before the RAP. */
-	rap -= 0.04;
-	if (rap > 0 && stsec < rap*1000.0) return round_msec(rap);
-	else return stsec;
-
-}
 int cmpinfo(int mcnt)
 {
 	int i;
@@ -612,15 +540,14 @@ int dumpinfo(int mcnt)
 			//終了位置をマーク
 			if ((m[i].cmflg==1)&&(honstart==1)) {
 				honstart=0;
-				//h[hcnt].edsec = m[i-1].stsec;
-				h[hcnt].edsec = checkMP4RAP(m[i-1].stsec,m[i-1].edsec) + m[i-1].edsecfix;
+				h[hcnt].edsec = m[i-1].stsec + m[i-1].edsecfix;
 				totalsec += h[hcnt].edsec - h[hcnt].stsec;
 				hcnt++;
 			}
 		}
 	}
 	if (honstart==1) {
-		h[hcnt].edsec = checkMP4RAP(m[i-1].stsec,m[i-1].edsec) + m[i-1].edsecfix;
+		h[hcnt].edsec = m[i-1].stsec + m[i-1].edsecfix;
 		totalsec += h[hcnt].edsec - h[hcnt].stsec;
 		hcnt++;
 	}
@@ -1045,7 +972,6 @@ int main(int argc, char *argv[])
 	if ((tmpenv=getenv("FFPROBE"))) FFPROBECMD=tmpenv;
 	if ((tmpenv=getenv("SOX"))) SOXCMD=tmpenv;
 	if ((tmpenv=getenv("MP4BOX"))) MP4BOXCMD=tmpenv;
-	if ((tmpenv=getenv("MP4BOXCMDRAPSTR"))) MP4BOXCMDRAPSTR=tmpenv;
 	if ((tmpenv=getenv("AACENC"))) AACENCCMD=tmpenv;
 	if ((tmpenv=getenv("AACENCPOT"))) AACENCOPT=tmpenv;
 	if ((tmpenv=getenv("MPLAYER"))) MPLAYERCMD=tmpenv;
