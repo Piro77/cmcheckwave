@@ -439,12 +439,14 @@ static int load_rap_times(void)
 	FILE *pp;
 	char pbuf[1024],*ptsptr,*flagptr;
 	char *cmd,*qfilename;
-	double pts;
-	int rap_capacity,status;
+	double pts,video_start;
+	int rap_capacity,status,video_track;
 
 	if (rap_loaded!=0) return rap_loaded>0 ? 0 : -1;
 	rap_loaded=-1;
 	if (wkfilename==NULL) return -1;
+	video_start=0.0;
+	if (read_stream_info(wkfilename,"v",&video_start,&video_track)!=0) return -1;
 
 	qfilename=shellquote(wkfilename);
 	asprintf(&cmd,"%s -v error -select_streams v:0 -show_packets -show_entries packet=pts_time,flags -of compact=p=0:nk=0 %s 2>/dev/null",
@@ -459,7 +461,9 @@ static int load_rap_times(void)
 		ptsptr=strstr(pbuf,"pts_time=");
 		flagptr=strstr(pbuf,"flags=");
 		if (ptsptr && strncmp(ptsptr+9,"N/A",3)!=0 && flagptr && strchr(flagptr+6,'K')) {
-			pts=strtod(ptsptr+9,NULL);
+			/* ffprobe reports movie-timeline PTS, while MP4Box's old split
+			 * message reported time relative to the video track start. */
+			pts=strtod(ptsptr+9,NULL)-video_start;
 			if (rap_count>=rap_capacity) {
 				rap_capacity=rap_capacity ? rap_capacity*2 : 1024;
 				rap_times=realloc(rap_times,sizeof(double)*rap_capacity);
